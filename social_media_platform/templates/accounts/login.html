@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% block title %}Login — SocialFlow{% endblock %}
+{% block content %}
+<div class="glass-card auth-card">
+  <a href="{% url 'core:home' %}" class="logo">
+    <div class="logo-icon">◈</div>
+    <span class="logo-text">SocialFlow</span>
+  </a>
+  <h1 class="auth-title">Welcome back</h1>
+  <p class="auth-subtitle">Sign in with your email to continue</p>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for field in form %}
+    <div class="form-group">
+      <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {% if field.field.widget.input_type == 'password' %}
+      <div class="password-field">
+        <input
+          type="password"
+          name="{{ field.name }}"
+          id="{{ field.id_for_label }}"
+          class="glass-input"
+          placeholder="{{ field.label }}"
+          {% if field.value %}value="{{ field.value }}"{% endif %}
+          {% if field.field.required %}required{% endif %}
+        >
+        <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
+          <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+          <svg class="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path>
+            <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path>
+            <line x1="1" y1="1" x2="23" y2="23"></line>
+          </svg>
+        </button>
+      </div>
+      {% else %}
+      <input
+        type="{% if field.name == 'username' %}email{% else %}{{ field.field.widget.input_type|default:'text' }}{% endif %}"
+        name="{{ field.name }}"
+        id="{{ field.id_for_label }}"
+        class="glass-input"
+        placeholder="{{ field.label }}"
+        {% if field.value %}value="{{ field.value }}"{% endif %}
+        {% if field.field.required %}required{% endif %}
+        {% if field.name == 'username' %}autocomplete="email" autofocus{% endif %}
+      >
+      {% endif %}
+      {% if field.errors %}
+      <p class="form-error">{{ field.errors.0 }}</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    {% if form.non_field_errors %}
+    <p class="form-error" style="margin-bottom:1rem;">{{ form.non_field_errors.0 }}</p>
+    {% endif %}
+
+    <button type="submit" class="btn-primary" style="margin-top:0.5rem;">Sign In</button>
+  </form>
+
+  <p class="auth-footer">
+    <a href="{% url 'accounts:forgot_password' %}" class="auth-link">Forgot password?</a>
+  </p>
+  <p class="auth-footer" style="margin-top:0.5rem;">
+    Don't have an account? <a href="{% url 'accounts:signup' %}" class="auth-link">Sign up free</a>
+  </p>
+</div>
+{% endblock %}

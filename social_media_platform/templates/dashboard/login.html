@@ -1,0 +1,88 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Login — SocialFlow</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/glass.css' %}">
+</head>
+<body>
+  <div class="bg-blobs">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  {% if messages %}
+  <div class="messages-container">
+    {% for message in messages %}
+    <div class="glass-card message-toast">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <main class="page-wrapper">
+    <div class="glass-card auth-card">
+      <div class="logo">
+        <div class="logo-icon">◈</div>
+        <span class="logo-text">SocialFlow</span>
+      </div>
+      <h1 class="auth-title">Superadmin Login</h1>
+      <p class="auth-subtitle">Sign in with your superadmin email. This area is for platform administrators only.</p>
+
+      {% if error %}
+      <p class="form-error" style="margin-bottom:1rem;">{{ error }}</p>
+      {% endif %}
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <div class="form-group">
+          <label class="form-label" for="id_email">Email</label>
+          <input type="email" name="email" id="id_email" class="glass-input" placeholder="admin@example.com" required autofocus autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="id_password">Password</label>
+          <div class="password-field">
+            <input type="password" name="password" id="id_password" class="glass-input" placeholder="Password" required autocomplete="current-password">
+            <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
+              <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <svg class="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path>
+                <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary" style="margin-top:0.5rem;">Sign In to Admin</button>
+      </form>
+
+      <p class="auth-footer">
+        <a href="{% url 'core:home' %}" class="auth-link">← Back to site</a>
+      </p>
+    </div>
+  </main>
+
+  <script>
+    document.addEventListener('click', function (event) {
+      var toggle = event.target.closest('.password-toggle');
+      if (!toggle) return;
+      var field = toggle.closest('.password-field');
+      var input = field && field.querySelector('input');
+      if (!input) return;
+      var show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      toggle.classList.toggle('is-visible', show);
+      toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      toggle.setAttribute('title', show ? 'Hide password' : 'Show password');
+    });
+  </script>
+</body>
+</html>

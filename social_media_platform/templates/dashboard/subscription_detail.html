@@ -1,0 +1,102 @@
+{% extends 'dashboard/base_admin.html' %}
+{% block title %}Subscription #{{ subscription.id }} — Admin{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <a href="{% url 'dashboard:subscriptions' %}" class="admin-back">← Subscriptions</a>
+    <h1 class="admin-page-title">{{ subscription.plan.name }}</h1>
+    <p class="admin-page-sub">
+      Subscription #{{ subscription.id }} ·
+      <span class="admin-badge status-{{ subscription.status }}">{{ subscription.get_status_display }}</span>
+    </p>
+  </div>
+  <div class="admin-header-actions">
+    <a href="{% url 'dashboard:user_detail' target_user.id %}" class="btn-secondary">View user</a>
+    <a href="{% url 'dashboard:subscriptions' %}?user={{ target_user.id }}" class="btn-secondary">User's subscriptions</a>
+  </div>
+</div>
+
+<div class="admin-grid-2">
+  <section class="glass-card admin-panel">
+    <div class="admin-panel-head"><h2>Subscription</h2></div>
+    <dl class="admin-dl">
+      <div><dt>Plan</dt><dd>{{ subscription.plan.name }} ({{ subscription.plan.get_plan_type_display }})</dd></div>
+      <div><dt>Plan price</dt><dd>${{ subscription.plan.price }} · {{ subscription.plan.duration_days }} days</dd></div>
+      <div><dt>Status</dt><dd><span class="admin-badge status-{{ subscription.status }}">{{ subscription.get_status_display }}</span></dd></div>
+      <div><dt>Trial</dt><dd>{% if subscription.is_trial %}Yes{% else %}No{% endif %}</dd></div>
+      <div><dt>Valid now</dt><dd>{% if subscription.is_valid %}Yes{% else %}No{% endif %}</dd></div>
+      <div><dt>Start date</dt><dd>{{ subscription.start_date|date:"F j, Y · g:i A" }}</dd></div>
+      <div><dt>Expiry date</dt><dd>{{ subscription.expiry_date|date:"F j, Y · g:i A" }}</dd></div>
+      <div><dt>Cancel at period end</dt><dd>{% if subscription.cancel_at_period_end %}Yes{% else %}No{% endif %}</dd></div>
+      <div><dt>Notes</dt><dd>{{ subscription.notes|default:"—" }}</dd></div>
+    </dl>
+  </section>
+
+  <section class="glass-card admin-panel">
+    <div class="admin-panel-head"><h2>User</h2></div>
+    <dl class="admin-dl">
+      <div><dt>Full name</dt><dd><a href="{% url 'dashboard:user_detail' target_user.id %}" class="auth-link">{{ target_user.get_full_name|default:target_user.email }}</a></dd></div>
+      <div><dt>Email</dt><dd>{{ target_user.email|default:"—" }}</dd></div>
+      <div><dt>Phone</dt><dd>{% if profile and profile.phone %}{{ profile.phone }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Joined</dt><dd>{{ target_user.date_joined|date:"F j, Y" }}</dd></div>
+      <div><dt>Last login</dt><dd>{% if target_user.last_login %}{{ target_user.last_login|date:"F j, Y · g:i A" }}{% else %}Never{% endif %}</dd></div>
+      <div><dt>Account active</dt><dd>{% if target_user.is_active %}Yes{% else %}No{% endif %}</dd></div>
+    </dl>
+  </section>
+</div>
+
+<section class="glass-card admin-panel" style="margin-top:1.25rem;">
+  <div class="admin-panel-head"><h2>Latest payment / receipt</h2></div>
+  <dl class="admin-dl admin-dl-wide">
+    <div><dt>Amount</dt><dd>{% if subscription.latest_payment_amount != None %}{{ subscription.latest_payment_currency|upper }} {{ subscription.latest_payment_amount }}{% else %}—{% endif %}</dd></div>
+    <div><dt>Payment status</dt><dd>{{ subscription.latest_payment_status|default:"—" }}</dd></div>
+    <div><dt>Payment date</dt><dd>{% if subscription.latest_payment_date %}{{ subscription.latest_payment_date|date:"F j, Y · g:i A" }}{% else %}—{% endif %}</dd></div>
+    <div><dt>Invoice ID</dt><dd>{{ subscription.latest_invoice_id|default:"—" }}</dd></div>
+    <div><dt>Payment intent</dt><dd>{{ subscription.stripe_payment_intent_id|default:"—" }}</dd></div>
+    <div>
+      <dt>Receipt</dt>
+      <dd>
+        {% if subscription.latest_receipt_url %}
+        <a href="{{ subscription.latest_receipt_url }}" target="_blank" rel="noopener" class="auth-link">Open latest receipt ↗</a>
+        {% else %}
+        No receipt on file yet
+        {% endif %}
+      </dd>
+    </div>
+  </dl>
+</section>
+
+<section class="glass-card admin-panel" style="margin-top:1.25rem;">
+  <div class="admin-panel-head"><h2>Stripe / billing IDs</h2></div>
+  <dl class="admin-dl admin-dl-wide">
+    <div><dt>Customer ID</dt><dd><code>{{ subscription.stripe_customer_id|default:"—" }}</code></dd></div>
+    <div><dt>Subscription ID</dt><dd><code>{{ subscription.stripe_subscription_id|default:"—" }}</code></dd></div>
+    <div><dt>Plan product ID</dt><dd><code>{{ subscription.plan.stripe_product_id|default:"—" }}</code></dd></div>
+    <div><dt>Plan price ID</dt><dd><code>{{ subscription.plan.stripe_price_id|default:"—" }}</code></dd></div>
+  </dl>
+</section>
+
+{% if other_subs %}
+<section class="glass-card admin-panel" style="margin-top:1.25rem;">
+  <div class="admin-panel-head"><h2>Other subscriptions for this user</h2></div>
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr><th>Plan</th><th>Status</th><th>Start</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for s in other_subs %}
+        <tr>
+          <td>{{ s.plan.name }}</td>
+          <td><span class="admin-badge status-{{ s.status }}">{{ s.get_status_display }}</span></td>
+          <td>{{ s.start_date|date:"M j, Y" }}</td>
+          <td><a href="{% url 'dashboard:subscription_detail' s.id %}" class="admin-link-btn">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

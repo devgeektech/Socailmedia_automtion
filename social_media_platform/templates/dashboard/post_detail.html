@@ -1,0 +1,45 @@
+{% extends 'dashboard/base_admin.html' %}
+{% block title %}Post #{{ post.id }} — Admin{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <a href="{% url 'dashboard:posts' %}" class="admin-back">← Posts</a>
+    <h1 class="admin-page-title">Post #{{ post.id }}</h1>
+    <p class="admin-page-sub">
+      <span class="admin-badge status-{{ post.status }}">{{ post.get_status_display }}</span>
+      · by <a href="{% url 'dashboard:user_detail' post.user_id %}" class="auth-link">{{ post.user.get_full_name|default:post.user.email }}</a>
+    </p>
+  </div>
+  <div class="admin-header-actions">
+    <a href="{% url 'dashboard:posts' %}?user={{ post.user_id }}" class="btn-secondary">User's posts</a>
+    <a href="{% url 'dashboard:user_detail' post.user_id %}" class="btn-secondary">View user</a>
+  </div>
+</div>
+
+<div class="admin-grid-2">
+  <section class="glass-card admin-panel">
+    <div class="admin-panel-head"><h2>Content</h2></div>
+    <dl class="admin-dl">
+      <div><dt>Description</dt><dd style="white-space:pre-wrap;">{{ post.description }}</dd></div>
+      <div><dt>Caption</dt><dd style="white-space:pre-wrap;">{{ post.caption|default:"—" }}</dd></div>
+      <div><dt>AI image prompt</dt><dd style="white-space:pre-wrap;">{{ post.image_prompt|default:"—" }}</dd></div>
+      <div><dt>Created</dt><dd>{{ post.created_at|date:"F j, Y · g:i A" }}</dd></div>
+      <div><dt>Updated</dt><dd>{{ post.updated_at|date:"F j, Y · g:i A" }}</dd></div>
+      <div><dt>Scheduled at</dt><dd>{% if post.scheduled_at %}{{ post.scheduled_at|date:"F j, Y · g:i A" }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Published at</dt><dd>{% if post.published_at %}{{ post.published_at|date:"F j, Y · g:i A" }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Facebook</dt><dd>{% if post.publish_to_facebook %}Yes{% else %}No{% endif %}</dd></div>
+      <div><dt>Instagram</dt><dd>{% if post.publish_to_instagram %}Yes{% else %}No{% endif %}</dd></div>
+    </dl>
+  </section>
+
+  <section class="glass-card admin-panel">
+    <div class="admin-panel-head"><h2>AI image</h2></div>
+    {% if post.image %}
+    <img src="{{ post.image.url }}" alt="Post image" class="admin-post-image">
+    {% else %}
+    <p class="admin-empty">No image generated for this post.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

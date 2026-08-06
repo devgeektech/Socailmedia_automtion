@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}Choose Your Plan — SocialFlow{% endblock %}
+{% block content %}
+<div class="plans-shell">
+  <div class="plans-header">
+    <a href="{% url 'core:home' %}" class="logo" style="justify-content:center;margin-bottom:1.5rem;">
+      <div class="logo-icon">◈</div>
+      <span class="logo-text">SocialFlow</span>
+    </a>
+    <h1 class="plans-title">Choose your plan</h1>
+    <p class="plans-subtitle">Pick a plan to unlock your dashboard and start scheduling across Facebook &amp; Instagram.</p>
+  </div>
+
+  <div class="plan-grid">
+    {% for plan in plans %}
+    <div class="glass-card plan-card {% if plan.is_popular %}popular{% endif %}">
+      {% if plan.is_popular %}
+      <span class="plan-badge">Most Popular</span>
+      {% endif %}
+      <h2 class="plan-name">{{ plan.name }}</h2>
+      <div class="plan-price">
+        {% if plan.price == 0 %}
+          Free
+        {% else %}
+          ${{ plan.price|floatformat:2 }}
+        {% endif %}
+        {% if plan.plan_type == 'monthly' %}
+        <span class="plan-price-period">/mo</span>
+        {% elif plan.plan_type == 'free_trial' %}
+        <span class="plan-price-period">/ {{ plan.duration_days }} days</span>
+        {% endif %}
+      </div>
+      <ul class="plan-features">
+        {% for feature in plan.features %}
+        <li>{{ feature }}</li>
+        {% endfor %}
+      </ul>
+      <a href="{% url 'subscriptions:select_plan' plan.slug %}" class="btn-primary">
+        {% if current_subscription and current_subscription.is_valid and current_subscription.plan_id == plan.id %}
+          Current Plan
+        {% elif plan.plan_type == 'free_trial' %}
+          Start Free Trial
+        {% else %}
+          Get Started
+        {% endif %}
+      </a>
+      {% if current_subscription and current_subscription.is_valid and current_subscription.plan_id == plan.id %}
+      <span class="plan-current">Active</span>
+      {% endif %}
+    </div>
+    {% empty %}
+    <p style="text-align:center;color:var(--text-muted);grid-column:1/-1;">No plans available yet.</p>
+    {% endfor %}
+  </div>
+
+  <p class="plans-footer-note">A plan is required before you can open the dashboard</p>
+
+  <p style="text-align:center;margin-top:1.25rem;">
+    <form method="post" action="{% url 'accounts:logout' %}" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="auth-link" style="background:none;border:none;cursor:pointer;font:inherit;padding:0;">Sign out</button>
+    </form>
+  </p>
+</div>
+{% endblock %}

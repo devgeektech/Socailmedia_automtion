@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard — SocialFlow{% endblock %}
+{% block wrapper_class %}dashboard-wrapper{% endblock %}
+{% block content %}
+<div class="dashboard-layout">
+  <div class="dashboard-header">
+    <div>
+      <a href="{% url 'subscriptions:dashboard' %}" class="logo" style="margin-bottom:0.5rem;">
+        <div class="logo-icon">◈</div>
+        <span class="logo-text">SocialFlow</span>
+      </a>
+      <h1 class="dashboard-title">Dashboard</h1>
+    </div>
+    <div class="dashboard-actions">
+      <a href="{% url 'posts:create' %}" class="btn-primary">Add Post</a>
+      <a href="{% url 'subscriptions:plans' %}" class="btn-secondary">Change Plan</a>
+      <form method="post" action="{% url 'accounts:logout' %}" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" class="btn-secondary">Sign Out</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="glass-card welcome-banner">
+    <h2>Welcome, {{ user.first_name|default:user.username }}!</h2>
+    <p>
+      You're on the <strong>{{ subscription.plan.name }}</strong> plan.
+      Active until <strong>{{ subscription.expiry_date|date:"F j, Y" }}</strong>.
+    </p>
+    <span class="subscription-badge">
+      {% if subscription.is_trial %}Free Trial{% else %}Active{% endif %} · {{ subscription.plan.name }}
+    </span>
+  </div>
+
+  <div class="glass-card meta-connect-card">
+    <div class="meta-connect-copy">
+      <h2 class="meta-connect-title">Facebook &amp; Instagram</h2>
+      {% if facebook_ready and instagram_ready %}
+      <p>
+        Connected to <strong>{{ profile.facebook_page_name|default:"your Page" }}</strong>
+        {% if profile.instagram_username %}and <strong>@{{ profile.instagram_username }}</strong>{% else %}and Instagram{% endif %}.
+      </p>
+      {% elif facebook_ready %}
+      <p>
+        Facebook Page <strong>{{ profile.facebook_page_name|default:"connected" }}</strong> is ready.
+        Connect Instagram to publish there too.
+      </p>
+      {% elif not meta_app_configured %}
+      <p>Social publishing is not configured on this site yet.</p>
+      {% else %}
+      <p>Connect your Facebook Page and Instagram to publish posts from SocialFlow.</p>
+      {% endif %}
+    </div>
+    <div class="meta-connect-actions">
+      <a href="{% url 'accounts:social_connections' %}" class="btn-primary">Manage connections</a>
+      {% if facebook_ready and not instagram_ready %}
+      <a href="{% url 'accounts:meta_connect' %}?for=instagram" class="btn-secondary">Connect Instagram</a>
+      {% elif not facebook_ready and meta_app_configured %}
+      <a href="{% url 'accounts:meta_connect' %}?for=facebook" class="btn-secondary">Connect Facebook</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="glass-card stat-card">
+      <div class="stat-value">{{ stats.total }}</div>
+      <div class="stat-label">Total Posts</div>
+    </div>
+    <div class="glass-card stat-card">
+      <div class="stat-value">{{ stats.scheduled }}</div>
+      <div class="stat-label">Scheduled</div>
+    </div>
+    <div class="glass-card stat-card">
+      <div class="stat-value">{{ stats.published }}</div>
+      <div class="stat-label">Published</div>
+    </div>
+    <div class="glass-card stat-card">
+      <div class="stat-value">{{ stats.failed }}</div>
+      <div class="stat-label">Failed</div>
+    </div>
+  </div>
+
+  <div class="posts-section">
+    <div class="posts-section-header">
+      <h2 class="posts-section-title">Your posts</h2>
+      <a href="{% url 'posts:create' %}" class="btn-primary btn-sm">+ New Post</a>
+    </div>
+
+    {% if posts %}
+    <div class="post-list">
+      {% for post in posts %}
+      <article class="glass-card social-post-card">
+        <div class="social-post-image">
+            {% if post.image %}
+                <img src="{{ post.image.url }}" alt="{{ post.caption }}">
+            {% else %}
+                <div class="no-image">
+                    <span>🖼</span>
+                </div>
+            {% endif %}
+        </div>
+        <div class="social-post-content">
+    
+            <div class="social-post-header">
+
+                <div class="social-post-copy">
+                    <h3>{{ post.caption|default:"Untitled Post" }}</h3>
+
+                    <p class="post-desc">
+                        {{ post.description|truncatechars:90 }}
+                    </p>
+
+                    <div class="platforms">
+                        {% if post.facebook_post_id %}
+                            <a class="chip facebook" href="https://www.facebook.com/{{ post.facebook_post_id }}" target="_blank" rel="noopener">Facebook ✓</a>
+                        {% elif post.publish_to_facebook %}
+                            <span class="chip facebook">Facebook</span>
+                        {% endif %}
+                        {% if post.instagram_media_id %}
+                            <span class="chip instagram" title="Published to Instagram">Instagram ✓</span>
+                        {% elif post.publish_to_instagram %}
+                            <span class="chip instagram">Instagram</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="status-section">
+
+                    <span class="status-pill status-{{ post.status }}">
+                        {{ post.get_status_display }}
+                    </span>
+
+                    {% if post.status == 'scheduled' and post.scheduled_at %}
+                        <small>{{ post.scheduled_at|date:"M d, Y · g:i A" }}</small>
+
+                    {% elif post.status == 'published' and post.published_at %}
+                        <small>{{ post.published_at|date:"M d, Y · g:i A" }}</small>
+
+                    {% else %}
+                        <small>{{ post.created_at|date:"M d, Y" }}</small>
+                    {% endif %}
+
+                </div>
+
+            </div>
+    
+            <div class="social-post-actions">
+
+                <a href="{% url 'posts:preview' post.pk %}" class="icon-btn" title="Preview" aria-label="Preview">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                </a>
+
+                {% if post.can_edit or post.status == 'published' %}
+                <a href="{% url 'posts:edit' post.pk %}" class="icon-btn" title="{% if post.status == 'scheduled' %}Reschedule{% else %}Edit{% endif %}" aria-label="{% if post.status == 'scheduled' %}Reschedule{% else %}Edit{% endif %}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 20h9"></path>
+                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                    </svg>
+                </a>
+                {% endif %}
+
+                {% if post.image %}
+                {% if facebook_ready and not post.facebook_post_id %}
+                <form method="post" action="{% url 'posts:publish_platform' post.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="platform" value="facebook">
+                  <button type="submit" class="icon-btn platform-publish-fb" title="Publish to Facebook" aria-label="Publish to Facebook">f</button>
+                </form>
+                {% endif %}
+                {% if instagram_ready and not post.instagram_media_id %}
+                <form method="post" action="{% url 'posts:publish_platform' post.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="platform" value="instagram">
+                  <button type="submit" class="icon-btn platform-publish-ig" title="Publish to Instagram" aria-label="Publish to Instagram">ig</button>
+                </form>
+                {% endif %}
+                {% endif %}
+
+                <form method="post"
+                      action="{% url 'posts:delete' post.pk %}"
+                      onsubmit="return confirm('Delete this post?');">
+
+                    {% csrf_token %}
+
+                    <button type="submit" class="icon-btn delete" title="Delete" aria-label="Delete">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            <line x1="10" y1="11" x2="10" y2="17"></line>
+                            <line x1="14" y1="11" x2="14" y2="17"></line>
+                        </svg>
+                    </button>
+
+                </form>
+
+            </div>
+    
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="glass-card dashboard-empty">
+      <p>No posts yet. Create your first post to start scheduling content.</p>
+      <a href="{% url 'posts:create' %}" class="btn-primary" style="width:auto;margin-top:1.25rem;">Add Post</a>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

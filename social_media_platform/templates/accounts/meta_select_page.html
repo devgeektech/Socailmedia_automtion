@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}Choose Facebook Page — SocialFlow{% endblock %}
+{% block wrapper_class %}dashboard-wrapper{% endblock %}
+{% block content %}
+<div class="dashboard-layout">
+  <div class="dashboard-header">
+    <div>
+      <h1 class="dashboard-title">Choose a Facebook Page</h1>
+      <p class="platform-note" style="margin:0.35rem 0 0;">
+        {% if require_instagram %}
+        Pick a Page that has Instagram linked.
+        {% else %}
+        Pick the Page you want to publish to.
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  <form method="post" class="glass-card page-picker-form">
+    {% csrf_token %}
+    <ul class="page-picker-list">
+      {% for page in pages %}
+      <li>
+        <label class="page-picker-item{% if require_instagram and not page.instagram_id %} is-disabled{% endif %}">
+          <input
+            type="radio"
+            name="page_id"
+            value="{{ page.id }}"
+            {% if require_instagram and not page.instagram_id %}disabled{% else %}{% if forloop.first %}checked{% endif %}{% endif %}
+          >
+          <span>
+            <strong>{{ page.name }}</strong>
+            {% if page.instagram_id %}
+            <small>Instagram{% if page.instagram_username %} · @{{ page.instagram_username }}{% endif %}</small>
+            {% else %}
+            <small>No Instagram linked</small>
+            {% endif %}
+          </span>
+        </label>
+      </li>
+      {% empty %}
+      <li><p>No Pages available.</p></li>
+      {% endfor %}
+    </ul>
+    <div class="form-actions">
+      <button type="submit" class="btn-primary" style="width:auto;">Connect this Page</button>
+      <a href="{% url 'accounts:social_connections' %}" class="btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

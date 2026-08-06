@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block title %}Social Connections — SocialFlow{% endblock %}
+{% block wrapper_class %}dashboard-wrapper{% endblock %}
+{% block content %}
+<div class="dashboard-layout">
+  <div class="dashboard-header">
+    <div>
+      <a href="{% url 'subscriptions:dashboard' %}" class="logo" style="margin-bottom:0.5rem;">
+        <div class="logo-icon">◈</div>
+        <span class="logo-text">SocialFlow</span>
+      </a>
+      <h1 class="dashboard-title">Social Connections</h1>
+      <p class="platform-note" style="margin:0.35rem 0 0;">Connect your own Facebook Page and Instagram to publish posts.</p>
+    </div>
+    <div class="dashboard-actions">
+      <a href="{% url 'subscriptions:dashboard' %}" class="btn-secondary">Back to Dashboard</a>
+    </div>
+  </div>
+
+  {% if not meta_app_configured %}
+  <div class="glass-card">
+    <p>Facebook Login is not configured on this site yet. Ask the admin to set Meta App ID and Secret.</p>
+  </div>
+  {% else %}
+
+  <div class="glass-card social-row">
+    <div class="social-row-icon platform-card-icon platform-card-icon-fb" aria-hidden="true">f</div>
+    <div class="social-row-copy">
+      <h2>Facebook</h2>
+      {% if facebook_ready %}
+      <p>Connected to Page <strong>{{ profile.facebook_page_name|default:"your Page" }}</strong>. Posts publish to this Page (not your personal profile).</p>
+      {% else %}
+      <p>Not connected. Connect a Facebook Page you manage.</p>
+      {% endif %}
+    </div>
+    <div class="social-row-actions">
+      {% if facebook_ready %}
+      <a href="{% url 'accounts:meta_connect' %}?for=facebook" class="btn-secondary">Reconnect</a>
+      <form method="post" action="{% url 'accounts:meta_disconnect' %}">
+        {% csrf_token %}
+        <input type="hidden" name="target" value="all">
+        <button type="submit" class="btn-secondary">Disconnect</button>
+      </form>
+      {% else %}
+      <a href="{% url 'accounts:meta_connect' %}?for=facebook" class="btn-primary">Connect Facebook</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="glass-card social-row">
+    <div class="social-row-icon platform-card-icon platform-card-icon-ig" aria-hidden="true">ig</div>
+    <div class="social-row-copy">
+      <h2>Instagram</h2>
+      {% if instagram_ready %}
+      <p>Connected{% if profile.instagram_username %} as <strong>@{{ profile.instagram_username }}</strong>{% endif %} (linked to your Facebook Page).</p>
+      {% elif facebook_ready %}
+      <p>Facebook is connected, but Instagram is not. Link an Instagram Business/Creator account to your Page, then connect here.</p>
+      {% else %}
+      <p>Connect Facebook first, then connect Instagram (must be linked to that Page in Meta).</p>
+      {% endif %}
+    </div>
+    <div class="social-row-actions">
+      {% if instagram_ready %}
+      <a href="{% url 'accounts:meta_connect' %}?for=instagram" class="btn-secondary">Reconnect</a>
+      <form method="post" action="{% url 'accounts:meta_disconnect' %}">
+        {% csrf_token %}
+        <input type="hidden" name="target" value="instagram">
+        <button type="submit" class="btn-secondary">Disconnect</button>
+      </form>
+      {% elif facebook_ready %}
+      <a href="{% url 'accounts:meta_connect' %}?for=instagram" class="btn-primary">Connect Instagram</a>
+      {% else %}
+      <a href="{% url 'accounts:meta_connect' %}?for=facebook" class="btn-secondary">Connect Facebook first</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="glass-card" style="margin-top:1rem;">
+    <p class="platform-note" style="margin:0;">
+      OAuth redirect for this browser:
+      <code>{{ oauth_redirect_uri }}</code>
+      — add this exact URL under Valid OAuth Redirect URIs in your Meta app.
+      Use the same host you browse on (<code>localhost</code> vs <code>127.0.0.1</code>).
+    </p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

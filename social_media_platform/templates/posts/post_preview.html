@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Preview Post — SocialFlow{% endblock %}
+{% block wrapper_class %}dashboard-wrapper{% endblock %}
+{% block content %}
+<div class="dashboard-layout" style="max-width:640px;">
+  <div class="dashboard-header">
+    <div>
+      <a href="{% url 'subscriptions:dashboard' %}" class="logo" style="margin-bottom:0.5rem;">
+        <div class="logo-icon">◈</div>
+        <span class="logo-text">SocialFlow</span>
+      </a>
+      <h1 class="dashboard-title">Post preview</h1>
+    </div>
+    <div class="dashboard-actions">
+      <a href="{% url 'posts:edit' post.pk %}" class="btn-secondary">Edit</a>
+      <a href="{% url 'subscriptions:dashboard' %}" class="btn-secondary">Dashboard</a>
+    </div>
+  </div>
+
+  <div class="glass-card social-preview full-preview">
+    <div class="social-preview-header">
+      <div class="social-avatar">{{ user.first_name|default:user.username|slice:":1"|upper }}</div>
+      <div>
+        <strong>{{ user.get_full_name|default:user.email }}</strong>
+        <small>
+          <span class="status-pill status-{{ post.status }}">{{ post.get_status_display }}</span>
+        </small>
+      </div>
+    </div>
+
+    <div class="social-preview-media{% if post.image %} has-image{% endif %}">
+      {% if post.image %}
+      <img src="{{ post.image.url }}" alt="" class="preview-media-el">
+      {% else %}
+      <div class="preview-media-placeholder">No AI image yet</div>
+      {% endif %}
+    </div>
+
+    <div class="social-preview-text">
+      {% if post.caption %}
+      <p class="social-preview-caption">{{ post.caption }}</p>
+      {% endif %}
+      <p class="social-preview-body">{{ post.description }}</p>
+    </div>
+
+    <p class="social-preview-schedule">
+      {% if post.status == 'scheduled' and post.scheduled_at %}
+        Scheduled for {{ post.scheduled_at|date:"F j, Y · g:i A" }}
+      {% elif post.status == 'published' and post.published_at %}
+        Published {{ post.published_at|date:"F j, Y · g:i A" }}
+      {% else %}
+        Created {{ post.created_at|date:"F j, Y · g:i A" }}
+      {% endif %}
+    </p>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Delete Post — SocialFlow{% endblock %}
+{% block wrapper_class %}dashboard-wrapper{% endblock %}
+{% block content %}
+<div class="dashboard-layout" style="max-width:520px;">
+  <div class="glass-card" style="text-align:center;">
+    <h1 class="dashboard-title" style="margin-bottom:0.75rem;">Delete post?</h1>
+    <p style="color:var(--text-muted);line-height:1.6;margin-bottom:1.5rem;">
+      {{ post.description|truncatechars:120 }}
+    </p>
+    <form method="post" class="form-actions" style="justify-content:center;">
+      {% csrf_token %}
+      <button type="submit" class="btn-danger">Yes, delete</button>
+      <a href="{% url 'subscriptions:dashboard' %}" class="btn-secondary">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

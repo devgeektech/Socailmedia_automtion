@@ -1,0 +1,155 @@
+{% extends 'dashboard/base_admin.html' %}
+{% block title %}{{ target_user.get_full_name|default:target_user.email }} — Admin{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <a href="{% url 'dashboard:users' %}" class="admin-back">← Users</a>
+    <h1 class="admin-page-title">{{ target_user.get_full_name|default:target_user.email }}</h1>
+    <p class="admin-page-sub">
+      {{ target_user.email }} · User #{{ target_user.id }} ·
+      {% if target_user.is_active %}
+      <span class="admin-badge status-active">Active</span>
+      {% else %}
+      <span class="admin-badge status-inactive">Inactive</span>
+      {% endif %}
+    </p>
+  </div>
+  <div class="admin-header-actions">
+    <form method="post" action="{% url 'dashboard:user_toggle_active' target_user.id %}">
+      {% csrf_token %}
+      <button type="submit" class="btn-secondary">
+        {% if target_user.is_active %}Deactivate user{% else %}Activate user{% endif %}
+      </button>
+    </form>
+    <a href="{% url 'dashboard:subscriptions' %}?user={{ target_user.id }}" class="btn-secondary">Subscriptions</a>
+    <a href="{% url 'dashboard:posts' %}?user={{ target_user.id }}" class="btn-secondary">Posts</a>
+  </div>
+</div>
+
+<div class="admin-grid-2">
+  <section class="glass-card admin-panel">
+    <div class="admin-panel-head"><h2>Account details</h2></div>
+    <dl class="admin-dl">
+      <div><dt>Full name</dt><dd>{{ target_user.get_full_name|default:"—" }}</dd></div>
+      <div><dt>Email</dt><dd>{{ target_user.email|default:"—" }}</dd></div>
+      <div><dt>Phone</dt><dd>{% if profile and profile.phone %}{{ profile.phone }}{% else %}—{% endif %}</dd></div>
+      <div><dt>Active</dt><dd>{% if target_user.is_active %}Yes{% else %}No{% endif %}</dd></div>
+      <div><dt>Date joined</dt><dd>{{ target_user.date_joined|date:"F j, Y · g:i A" }}</dd></div>
+      <div><dt>Last login</dt><dd>{% if target_user.last_login %}{{ target_user.last_login|date:"F j, Y · g:i A" }}{% else %}Never{% endif %}</dd></div>
+    </dl>
+  </section>
+
+  <section class="glass-card admin-panel">
+    <div class="admin-panel-head"><h2>Current subscription</h2></div>
+    {% if current_subscription %}
+    <dl class="admin-dl">
+      <div><dt>Plan</dt><dd>{{ current_subscription.plan.name }}</dd></div>
+      <div><dt>Status</dt><dd><span class="admin-badge status-{{ current_subscription.status }}">{{ current_subscription.get_status_display }}</span></dd></div>
+      <div><dt>Trial</dt><dd>{% if current_subscription.is_trial %}Yes{% else %}No{% endif %}</dd></div>
+      <div><dt>Started</dt><dd>{{ current_subscription.start_date|date:"F j, Y" }}</dd></div>
+      <div><dt>Expires</dt><dd>{{ current_subscription.expiry_date|date:"F j, Y · g:i A" }}</dd></div>
+      <div><dt>Valid now</dt><dd>{% if current_subscription.is_valid %}Yes{% else %}No{% endif %}</dd></div>
+    </dl>
+    <a href="{% url 'dashboard:subscription_detail' current_subscription.id %}" class="admin-link-btn" style="margin-top:1rem;display:inline-flex;">Open subscription</a>
+    {% else %}
+    <p class="admin-empty">No active subscription.</p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="glass-card admin-panel" style="margin-top:1.25rem;">
+  <div class="admin-panel-head"><h2>Assign subscription manually</h2></div>
+  <p class="admin-page-sub" style="margin-bottom:1rem;">This deactivates any current active plan and creates a new active subscription.</p>
+  <form method="post" action="{% url 'dashboard:assign_subscription' target_user.id %}" class="admin-assign-form">
+    {% csrf_token %}
+    <div class="form-group">
+      <label class="form-label" for="plan_id">Plan</label>
+      <select name="plan_id" id="plan_id" class="glass-input" required>
+        <option value="">Select a plan…</option>
+        {% for plan in plans %}
+        <option value="{{ plan.id }}">{{ plan.name }} — ${{ plan.price }} / {{ plan.duration_days }} days</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="duration_days">Duration (days)</label>
+      <input type="number" name="duration_days" id="duration_days" class="glass-input" min="1" placeholder="Leave blank to use plan default">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="notes">Admin notes</label>
+      <textarea name="notes" id="notes" class="glass-input" rows="2" placeholder="Optional note for this assignment"></textarea>
+    </div>
+    <button type="submit" class="btn-primary" style="width:auto;">Assign plan</button>
+  </form>
+</section>
+
+<section class="glass-card admin-panel" style="margin-top:1.25rem;">
+  <div class="admin-panel-head">
+    <h2>Subscription history</h2>
+    <a href="{% url 'dashboard:subscriptions' %}?user={{ target_user.id }}" class="auth-link">All for this user</a>
+  </div>
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Plan</th>
+          <th>Status</th>
+          <th>Start</th>
+          <th>Expiry</th>
+          <th>Latest payment</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in subscriptions %}
+        <tr>
+          <td>{{ s.plan.name }}</td>
+          <td><span class="admin-badge status-{{ s.status }}">{{ s.get_status_display }}</span></td>
+          <td>{{ s.start_date|date:"M j, Y" }}</td>
+          <td>{{ s.expiry_date|date:"M j, Y" }}</td>
+          <td>
+            {% if s.latest_payment_amount != None %}
+            {{ s.latest_payment_currency|upper }} {{ s.latest_payment_amount }}
+            {% else %}—{% endif %}
+          </td>
+          <td><a href="{% url 'dashboard:subscription_detail' s.id %}" class="admin-link-btn">Full view</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="admin-empty">No subscriptions for this user.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="glass-card admin-panel" style="margin-top:1.25rem;">
+  <div class="admin-panel-head">
+    <h2>Recent posts</h2>
+    <a href="{% url 'dashboard:posts' %}?user={{ target_user.id }}" class="auth-link">All posts</a>
+  </div>
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr><th>Content</th><th>Status</th><th>When</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for p in user_posts %}
+        <tr>
+          <td>{{ p.description|truncatechars:80 }}</td>
+          <td><span class="admin-badge status-{{ p.status }}">{{ p.get_status_display }}</span></td>
+          <td>
+            {% if p.status == 'scheduled' and p.scheduled_at %}{{ p.scheduled_at|date:"M j, Y g:i A" }}
+            {% elif p.published_at %}{{ p.published_at|date:"M j, Y g:i A" }}
+            {% else %}{{ p.created_at|date:"M j, Y" }}{% endif %}
+          </td>
+          <td><a href="{% url 'dashboard:post_detail' p.id %}" class="admin-link-btn">View</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="admin-empty">No posts yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

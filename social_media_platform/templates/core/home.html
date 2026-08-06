@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}SocialFlow — Schedule & Publish Smarter{% endblock %}
+{% block body_class %}home-page{% endblock %}
+{% block wrapper_class %}home-wrapper{% endblock %}
+
+{% block navbar %}
+<nav class="navbar glass-card">
+  <a href="{% url 'core:home' %}" class="logo">
+    <div class="logo-icon">◈</div>
+    <span class="logo-text">SocialFlow</span>
+  </a>
+  <div class="nav-links">
+    <a href="#features" class="nav-link">Features</a>
+    <a href="{% url 'accounts:login' %}" class="nav-link">Login</a>
+    <a href="{% url 'accounts:signup' %}" class="btn-primary nav-btn">Get Started</a>
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<section class="hero-bleed">
+  <div class="hero-visual" aria-hidden="true">
+    <div class="hero-flow">
+      <div class="flow-bar"></div>
+      <div class="flow-row">
+        <div class="flow-chip"></div>
+        <div class="flow-chip"></div>
+        <div class="flow-chip"></div>
+      </div>
+      <div class="flow-panel"></div>
+    </div>
+  </div>
+  <div class="hero-copy">
+    <h1 class="hero-brand">Social<span>Flow</span></h1>
+    <p class="hero-line">Schedule once. Publish everywhere.</p>
+    <p class="hero-sub">
+      Plan and ship posts to Facebook &amp; Instagram from one calm workspace — weeks ahead, or right now.
+    </p>
+    <div class="hero-actions">
+      <a href="{% url 'accounts:signup' %}" class="btn-primary">Start Free Trial</a>
+      <a href="{% url 'accounts:login' %}" class="btn-secondary">Sign In</a>
+    </div>
+  </div>
+</section>
+
+<section id="features" class="home-section">
+  <div class="section-header">
+    <h2 class="section-title">Built for creators who ship on time</h2>
+    <p class="section-subtitle">Everything you need to plan, publish, and stay on top of your social presence — without the chaos.</p>
+  </div>
+  <div class="features-grid">
+    {% for feature in features %}
+    <article class="feature-item">
+      <div class="feature-icon">{{ feature.icon }}</div>
+      <h3 class="feature-title">{{ feature.title }}</h3>
+      <p class="feature-desc">{{ feature.desc }}</p>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="cta-band">
+  <h2 class="cta-title">Ready when you are</h2>
+  <p class="cta-subtitle">Create an account, pick a plan, then unlock your dashboard. Free trial — no card required.</p>
+  <div class="hero-actions">
+    <a href="{% url 'accounts:signup' %}" class="btn-primary">Create Free Account</a>
+    <a href="{% url 'accounts:login' %}" class="btn-secondary">Sign In</a>
+  </div>
+</section>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <a href="{% url 'core:home' %}" class="logo" style="margin-bottom:0;">
+      <div class="logo-icon">◈</div>
+      <span class="logo-text">SocialFlow</span>
+    </a>
+    <p class="footer-copy">&copy; 2026 SocialFlow. Schedule smarter, publish faster.</p>
+    <div class="footer-links">
+      <a href="{% url 'accounts:login' %}" class="nav-link">Login</a>
+      <a href="{% url 'accounts:signup' %}" class="nav-link">Sign Up</a>
+    </div>
+  </div>
+</footer>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends 'dashboard/base_admin.html' %}
+{% block title %}Posts — Admin{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Posts</h1>
+    <p class="admin-page-sub">
+      {{ total }} post{{ total|pluralize }}
+      {% if filter_user %}
+      · filtered by <strong>{{ filter_user.get_full_name|default:filter_user.email }}</strong>
+      <a href="{% url 'dashboard:posts' %}{% if status %}?status={{ status }}{% endif %}" class="auth-link">Clear</a>
+      {% endif %}
+    </p>
+  </div>
+  <div class="admin-header-actions">
+    <a href="{% url 'dashboard:posts' %}?status=scheduled" class="btn-secondary">Scheduled</a>
+    <a href="{% url 'dashboard:posts' %}?status=published" class="btn-secondary">Published</a>
+  </div>
+</div>
+
+<form method="get" class="admin-filters glass-card">
+  {% if filter_user %}<input type="hidden" name="user" value="{{ filter_user.id }}">{% endif %}
+  <input type="search" name="q" value="{{ q }}" class="glass-input" placeholder="Search content, caption, user…">
+  <select name="status" class="glass-input">
+    <option value="">All statuses</option>
+    {% for value, label in status_choices %}
+    <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn-secondary">Filter</button>
+</form>
+
+<section class="glass-card admin-panel">
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>Media</th>
+          <th>User</th>
+          <th>Content</th>
+          <th>Status</th>
+          <th>Schedule / publish</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for post in posts %}
+        <tr>
+          <td>
+            {% if post.image %}
+            <img src="{{ post.image.url }}" alt="" class="admin-post-thumb">
+            {% else %}
+            <div class="admin-post-thumb admin-post-thumb-empty">◈</div>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{% url 'dashboard:user_detail' post.user_id %}" class="auth-link">{{ post.user.get_full_name|default:post.user.email }}</a>
+          </td>
+          <td>
+            <strong>{{ post.description|truncatechars:90 }}</strong>
+            {% if post.caption %}<div class="admin-muted">{{ post.caption|truncatechars:60 }}</div>{% endif %}
+          </td>
+          <td><span class="admin-badge status-{{ post.status }}">{{ post.get_status_display }}</span></td>
+          <td>
+            {% if post.status == 'scheduled' and post.scheduled_at %}
+            Scheduled {{ post.scheduled_at|date:"M j, Y · g:i A" }}
+            {% elif post.status == 'published' and post.published_at %}
+            Published {{ post.published_at|date:"M j, Y · g:i A" }}
+            {% else %}
+            Created {{ post.created_at|date:"M j, Y" }}
+            {% endif %}
+          </td>
+          <td><a href="{% url 'dashboard:post_detail' post.id %}" class="admin-link-btn">Full view</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="admin-empty">No posts found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

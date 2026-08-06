@@ -1,0 +1,342 @@
+{% extends 'dashboard/base_admin.html' %}
+{% block title %}Overview — Admin{% endblock %}
+
+{% block admin_content %}
+<div class="admin-page-header">
+  <div>
+    <h1 class="admin-page-title">Platform usage</h1>
+    <p class="admin-page-sub">Monitor users, subscriptions, and post activity</p>
+  </div>
+</div>
+
+<div class="admin-stats admin-stats-wide">
+  <div class="glass-card admin-stat">
+    <div class="admin-stat-value">{{ stats.total_users }}</div>
+    <div class="admin-stat-label">Total users</div>
+  </div>
+  <div class="glass-card admin-stat">
+    <div class="admin-stat-value">{{ stats.active_users }}</div>
+    <div class="admin-stat-label">Active users</div>
+  </div>
+  <div class="glass-card admin-stat">
+    <div class="admin-stat-value">{{ stats.inactive_users }}</div>
+    <div class="admin-stat-label">Deactivated</div>
+  </div>
+  <div class="glass-card admin-stat">
+    <div class="admin-stat-value">{{ stats.active_subs }}</div>
+    <div class="admin-stat-label">Active subscriptions</div>
+  </div>
+  <div class="glass-card admin-stat">
+    <div class="admin-stat-value">{{ stats.scheduled_posts }}</div>
+    <div class="admin-stat-label">Scheduled posts</div>
+  </div>
+  <div class="glass-card admin-stat">
+    <div class="admin-stat-value">{{ stats.published_posts }}</div>
+    <div class="admin-stat-label">Published posts</div>
+  </div>
+  <div class="glass-card admin-stat">
+    <div class="admin-stat-value">{{ stats.failed_posts }}</div>
+    <div class="admin-stat-label">Failed posts</div>
+  </div>
+  <div class="glass-card admin-stat">
+    <div class="admin-stat-value">{{ stats.total_posts }}</div>
+    <div class="admin-stat-label">Total posts</div>
+  </div>
+</div>
+
+<section class="glass-card admin-panel analytics-panel" style="margin-top:1.25rem;">
+  <div class="admin-panel-head">
+    <div>
+      <h2>Subscription analytics</h2>
+      <span class="admin-muted">Purchases &amp; subscribers by month</span>
+    </div>
+    <label class="analytics-year-filter">
+      <span>Year</span>
+      <select id="analytics-year-select" class="glass-input analytics-year-select" aria-label="Select year">
+        {% for year in analytics.charts.years %}
+        <option value="{{ year }}" {% if year == analytics.charts.default_year %}selected{% endif %}>{{ year }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+
+  <div class="analytics-chart-wrap analytics-chart-wrap-lg">
+    <canvas id="chart-subscriptions" height="160"></canvas>
+  </div>
+
+  <div class="analytics-block" style="margin-top:1.35rem;">
+    <h3 class="analytics-block-title">By plan</h3>
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Plan</th>
+            <th>Price</th>
+            <th>Total subs</th>
+            <th>Active</th>
+            <th>Purchase amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in analytics.by_plan %}
+          <tr>
+            <td>
+              <strong>{{ row.name }}</strong>
+              <div class="admin-muted">{{ row.plan_type }}</div>
+            </td>
+            <td>${{ row.price|floatformat:2 }}</td>
+            <td>{{ row.total_subs }}</td>
+            <td>{{ row.active_subs }}</td>
+            <td><strong>${{ row.revenue|floatformat:2 }}</strong></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="admin-empty">No plans yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<div class="admin-quick-links">
+  <a href="{% url 'dashboard:posts' %}?status=scheduled" class="btn-secondary">View scheduled posts</a>
+  <a href="{% url 'dashboard:posts' %}?status=published" class="btn-secondary">View published posts</a>
+  <a href="{% url 'dashboard:users' %}" class="btn-secondary">Manage users</a>
+  <a href="{% url 'dashboard:subscriptions' %}" class="btn-secondary">Manage subscriptions</a>
+</div>
+
+<div class="admin-grid-2" style="margin-top:1.25rem;">
+  <section class="glass-card admin-panel">
+    <div class="admin-panel-head">
+      <h2>Recent users</h2>
+      <a href="{% url 'dashboard:users' %}" class="auth-link">View all</a>
+    </div>
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr><th>User</th><th>Status</th><th>Joined</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for u in recent_users %}
+          <tr>
+            <td>
+              <strong>{{ u.get_full_name|default:u.email }}</strong>
+              <div class="admin-muted">{{ u.email }}</div>
+            </td>
+            <td>
+              {% if u.is_active %}
+              <span class="admin-badge status-active">Active</span>
+              {% else %}
+              <span class="admin-badge status-inactive">Inactive</span>
+              {% endif %}
+            </td>
+            <td>{{ u.date_joined|date:"M j, Y" }}</td>
+            <td><a href="{% url 'dashboard:user_detail' u.id %}" class="admin-link-btn">View</a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="admin-empty">No users yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="glass-card admin-panel">
+    <div class="admin-panel-head">
+      <h2>Recent subscriptions</h2>
+      <a href="{% url 'dashboard:subscriptions' %}" class="auth-link">View all</a>
+    </div>
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr><th>User</th><th>Plan</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for s in recent_subs %}
+          <tr>
+            <td><a href="{% url 'dashboard:user_detail' s.user_id %}" class="auth-link">{{ s.user.get_full_name|default:s.user.email }}</a></td>
+            <td>{{ s.plan.name }}</td>
+            <td><span class="admin-badge status-{{ s.status }}">{{ s.get_status_display }}</span></td>
+            <td><a href="{% url 'dashboard:subscription_detail' s.id %}" class="admin-link-btn">View</a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="admin-empty">No subscriptions yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<section class="glass-card admin-panel" style="margin-top:1.25rem;">
+  <div class="admin-panel-head">
+    <h2>Recent posts</h2>
+    <a href="{% url 'dashboard:posts' %}" class="auth-link">View all</a>
+  </div>
+  <div class="admin-table-wrap">
+    <table class="admin-table">
+      <thead>
+        <tr><th>User</th><th>Preview</th><th>Status</th><th>When</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for p in recent_posts %}
+        <tr>
+          <td><a href="{% url 'dashboard:user_detail' p.user_id %}" class="auth-link">{{ p.user.get_full_name|default:p.user.email }}</a></td>
+          <td>{{ p.description|truncatechars:60 }}</td>
+          <td><span class="admin-badge status-{{ p.status }}">{{ p.get_status_display }}</span></td>
+          <td>
+            {% if p.status == 'scheduled' and p.scheduled_at %}
+            {{ p.scheduled_at|date:"M j, Y g:i A" }}
+            {% elif p.status == 'published' and p.published_at %}
+            {{ p.published_at|date:"M j, Y g:i A" }}
+            {% else %}
+            {{ p.created_at|date:"M j, Y" }}
+            {% endif %}
+          </td>
+          <td><a href="{% url 'dashboard:post_detail' p.id %}" class="admin-link-btn">View</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="admin-empty">No posts yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+{{ analytics.charts|json_script:"analytics-charts-data" }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var raw = document.getElementById('analytics-charts-data');
+  var select = document.getElementById('analytics-year-select');
+  var canvas = document.getElementById('chart-subscriptions');
+  if (!raw || !canvas || typeof Chart === 'undefined') return;
+
+  var data = JSON.parse(raw.textContent);
+  var byYear = data.by_year || {};
+  var year = data.default_year || (data.years && data.years[0]) || '';
+  var teal = '#0d9488';
+  var tealSoft = 'rgba(13, 148, 136, 0.18)';
+  var ink = '#0f766e';
+  var slate = '#64748b';
+  var chart = null;
+
+  function seriesFor(y) {
+    return byYear[String(y)] || {
+      labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+      revenue: [0,0,0,0,0,0,0,0,0,0,0,0],
+      subscribers: [0,0,0,0,0,0,0,0,0,0,0,0],
+      users: [0,0,0,0,0,0,0,0,0,0,0,0]
+    };
+  }
+
+  function render(y) {
+    var series = seriesFor(y);
+    if (chart) {
+      chart.data.labels = series.labels;
+      chart.data.datasets[0].data = series.revenue;
+      chart.data.datasets[1].data = series.subscribers;
+      chart.data.datasets[2].data = series.users;
+      chart.update();
+      return;
+    }
+    chart = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: series.labels,
+        datasets: [
+          {
+            label: 'Purchase amount',
+            data: series.revenue,
+            borderColor: teal,
+            backgroundColor: tealSoft,
+            fill: true,
+            tension: 0.35,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: teal,
+            yAxisID: 'y'
+          },
+          {
+            label: 'Subscribers',
+            data: series.subscribers,
+            borderColor: ink,
+            backgroundColor: 'transparent',
+            fill: false,
+            tension: 0.35,
+            pointRadius: 3,
+            borderDash: [5, 4],
+            yAxisID: 'y1'
+          },
+          {
+            label: 'Users',
+            data: series.users,
+            borderColor: slate,
+            backgroundColor: 'transparent',
+            fill: false,
+            tension: 0.35,
+            pointRadius: 3,
+            yAxisID: 'y1'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { boxWidth: 12, usePointStyle: true, padding: 16 }
+          },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                var label = ctx.dataset.label || '';
+                var val = ctx.parsed.y;
+                if (ctx.dataset.yAxisID === 'y') {
+                  return label + ': $' + Number(val).toFixed(2);
+                }
+                return label + ': ' + val;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: { maxRotation: 0 }
+          },
+          y: {
+            type: 'linear',
+            position: 'left',
+            beginAtZero: true,
+            title: { display: true, text: 'Purchase $' },
+            grid: { color: 'rgba(12, 31, 46, 0.06)' },
+            ticks: { callback: function (v) { return '$' + v; } }
+          },
+          y1: {
+            type: 'linear',
+            position: 'right',
+            beginAtZero: true,
+            title: { display: true, text: 'Count' },
+            grid: { drawOnChartArea: false },
+            ticks: { precision: 0 }
+          }
+        }
+      }
+    });
+  }
+
+  if (select) {
+    select.addEventListener('change', function () {
+      render(select.value);
+    });
+    year = select.value || year;
+  }
+  render(year);
+})();
+</script>
+{% endblock %}

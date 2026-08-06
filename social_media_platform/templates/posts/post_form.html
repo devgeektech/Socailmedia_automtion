@@ -1,0 +1,391 @@
+{% extends 'base.html' %}
+{% block title %}{{ page_title }} — SocialFlow{% endblock %}
+{% block wrapper_class %}dashboard-wrapper{% endblock %}
+{% block content %}
+<div class="dashboard-layout post-form-layout">
+  <div class="dashboard-header">
+    <div>
+      <a href="{% url 'subscriptions:dashboard' %}" class="logo" style="margin-bottom:0.5rem;">
+        <div class="logo-icon">◈</div>
+        <span class="logo-text">SocialFlow</span>
+      </a>
+      <h1 class="dashboard-title">{{ page_title }}</h1>
+    </div>
+    <div class="dashboard-actions">
+      <a href="{% url 'subscriptions:dashboard' %}" class="btn-secondary">Back to Dashboard</a>
+    </div>
+  </div>
+
+  <div class="post-composer">
+    <form method="post" class="glass-card post-form-card" id="post-form" novalidate>
+      {% csrf_token %}
+      {{ form.generated_image_path }}
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.description.id_for_label }}">{{ form.description.label }}</label>
+        {{ form.description }}
+        {% if form.description.errors %}<p class="form-error">{{ form.description.errors.0 }}</p>{% endif %}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="{{ form.caption.id_for_label }}">{{ form.caption.label }}</label>
+        {{ form.caption }}
+        {% if form.caption.errors %}<p class="form-error">{{ form.caption.errors.0 }}</p>{% endif %}
+      </div>
+
+      <div class="form-group ai-image-group">
+        <label class="form-label" for="{{ form.image_prompt.id_for_label }}">{{ form.image_prompt.label }}</label>
+        <p class="platform-note" style="margin-bottom:0.65rem;">Describe what you want — we create 3 options and you pick one. No uploads.</p>
+        {{ form.image_prompt }}
+        {% if form.image_prompt.errors %}<p class="form-error">{{ form.image_prompt.errors.0 }}</p>{% endif %}
+        <div class="ai-image-actions">
+          <button type="button" class="btn-secondary" id="btn-generate-image">Generate images</button>
+          <span class="ai-status" id="ai-status" aria-live="polite"></span>
+        </div>
+        <div class="ai-image-picker" id="ai-image-picker" hidden>
+          <p class="platform-note ai-picker-hint">Select one image for your post</p>
+          <div class="ai-image-options" id="ai-image-options"></div>
+        </div>
+        {% if is_edit and post.image %}
+        <label class="clear-media" style="margin-top:0.85rem;">
+          {{ form.regenerate_image }} {{ form.regenerate_image.label }}
+        </label>
+        {% endif %}
+      </div>
+
+      <fieldset class="publish-fieldset">
+        <legend class="form-label">Publishing</legend>
+        <div class="publish-options">
+          {% for radio in form.publish_action %}
+          <label class="publish-option">{{ radio.tag }} <span>{{ radio.choice_label }}</span></label>
+          {% endfor %}
+        </div>
+        {% if form.publish_action.errors %}<p class="form-error">{{ form.publish_action.errors.0 }}</p>{% endif %}
+
+        <div class="form-group schedule-field" id="schedule-field">
+          <label class="form-label" for="{{ form.scheduled_at.id_for_label }}">{{ form.scheduled_at.label }}</label>
+          {{ form.scheduled_at }}
+          {% if form.scheduled_at.errors %}<p class="form-error">{{ form.scheduled_at.errors.0 }}</p>{% endif %}
+        </div>
+      </fieldset>
+
+      <fieldset class="platform-fieldset">
+        <legend class="form-label">Publish to</legend>
+        {% if not facebook_ready and not instagram_ready %}
+        <p class="platform-note">
+          <a href="{% url 'accounts:social_connections' %}">Connect Facebook &amp; Instagram</a>
+          first, then choose where to publish. Facebook posts go to your Page (not your personal profile).
+        </p>
+        {% elif facebook_ready and not instagram_ready %}
+        <p class="platform-note">
+          Facebook is ready.
+          <a href="{% url 'accounts:meta_connect' %}?for=instagram">Connect Instagram</a>
+          to publish there too (Instagram needs a public HTTPS image URL).
+        </p>
+        {% else %}
+        <p class="platform-note">Tap Instagram and/or Facebook. Posts go to your connected Page / Instagram feed.</p>
+        {% endif %}
+        <div class="platform-cards">
+          <label class="platform-card{% if not facebook_ready %} is-disabled{% endif %}{% if form.publish_to_facebook.value %} is-selected{% endif %}">
+            {{ form.publish_to_facebook }}
+            <span class="platform-card-icon platform-card-icon-fb" aria-hidden="true">f</span>
+            <span class="platform-card-copy">
+              <strong>Facebook</strong>
+              <small>{% if facebook_ready %}Publish to your Page{% else %}Connect Facebook first{% endif %}</small>
+            </span>
+          </label>
+          <label class="platform-card{% if not instagram_ready %} is-disabled{% endif %}{% if form.publish_to_instagram.value %} is-selected{% endif %}">
+            {{ form.publish_to_instagram }}
+            <span class="platform-card-icon platform-card-icon-ig" aria-hidden="true">ig</span>
+            <span class="platform-card-copy">
+              <strong>Instagram</strong>
+              <small>{% if instagram_ready %}Publish to your feed{% else %}Connect Instagram first{% endif %}</small>
+            </span>
+          </label>
+        </div>
+        {% if form.publish_to_facebook.errors %}<p class="form-error">{{ form.publish_to_facebook.errors.0 }}</p>{% endif %}
+        {% if form.publish_to_instagram.errors %}<p class="form-error">{{ form.publish_to_instagram.errors.0 }}</p>{% endif %}
+      </fieldset>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-primary" style="width:auto;">
+          {% if is_edit %}Save changes{% else %}Create post{% endif %}
+        </button>
+        <a href="{% url 'subscriptions:dashboard' %}" class="btn-secondary">Cancel</a>
+      </div>
+    </form>
+
+    <aside class="glass-card post-preview-panel" aria-live="polite">
+      <div class="preview-panel-header">
+        <h2>Live preview</h2>
+        <span class="preview-hint">How your post will look</span>
+      </div>
+      <div class="social-preview">
+        <div class="social-preview-header">
+          <div class="social-avatar">{{ user.first_name|default:user.username|slice:":1"|upper }}</div>
+          <div>
+            <strong>{{ user.first_name|default:user.username }}</strong>
+            <small id="preview-status-label">Draft preview</small>
+          </div>
+        </div>
+        <div class="social-preview-media{% if is_edit and post.image %} has-image{% endif %}" id="preview-media">
+          <div class="preview-media-placeholder" id="preview-placeholder" {% if is_edit and post.image %}hidden{% endif %}>AI image preview</div>
+          <img
+            src="{% if is_edit and post.image %}{{ post.image.url }}{% endif %}"
+            alt=""
+            id="preview-image"
+            class="preview-media-el"
+            {% if not is_edit or not post.image %}hidden{% endif %}
+          >
+        </div>
+        <div class="social-preview-text">
+          <p class="social-preview-caption" id="preview-caption">{% if is_edit %}{{ post.caption }}{% endif %}</p>
+          <p class="social-preview-body" id="preview-description">{% if is_edit %}{{ post.description }}{% endif %}</p>
+        </div>
+        <p class="social-preview-schedule" id="preview-schedule"></p>
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var description = document.getElementById('id_description');
+  var caption = document.getElementById('id_caption');
+  var imagePrompt = document.getElementById('id_image_prompt');
+  var generatedPath = document.getElementById('id_generated_image_path');
+  var scheduledAt = document.getElementById('id_scheduled_at');
+  var scheduleField = document.getElementById('schedule-field');
+  var generateBtn = document.getElementById('btn-generate-image');
+  var aiStatus = document.getElementById('ai-status');
+  var regenerate = document.getElementById('id_regenerate_image');
+  var picker = document.getElementById('ai-image-picker');
+  var optionsEl = document.getElementById('ai-image-options');
+
+  var previewDesc = document.getElementById('preview-description');
+  var previewCaption = document.getElementById('preview-caption');
+  var previewImage = document.getElementById('preview-image');
+  var previewPlaceholder = document.getElementById('preview-placeholder');
+  var previewSchedule = document.getElementById('preview-schedule');
+  var previewStatus = document.getElementById('preview-status-label');
+
+  function csrfToken() {
+    var el = document.querySelector('#post-form input[name="csrfmiddlewaretoken"]');
+    if (el && el.value) return el.value;
+    var match = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
+  function parseJsonResponse(res) {
+    return res.text().then(function (text) {
+      var data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (err) {
+        var hint = 'Server returned an unexpected response.';
+        if (res.status === 403) hint = 'Session expired or CSRF failed. Refresh the page and try again.';
+        else if (res.status === 401) hint = 'Please sign in again.';
+        else if (res.status >= 500) hint = 'Server error while generating images. Try again.';
+        else if (text && text.indexOf('<!DOCTYPE') !== -1) {
+          hint = 'Server returned a web page instead of image data. Refresh and try again.';
+        }
+        throw new Error(hint);
+      }
+      return { ok: res.ok, status: res.status, data: data || {} };
+    });
+  }
+
+  function showImage(url, sourceImg) {
+    if (!url && !(sourceImg && (sourceImg.currentSrc || sourceImg.src))) return;
+    var media = document.getElementById('preview-media');
+    if (previewPlaceholder) {
+      previewPlaceholder.setAttribute('hidden', 'hidden');
+      previewPlaceholder.style.display = 'none';
+    }
+    if (previewImage) {
+      previewImage.removeAttribute('hidden');
+      previewImage.hidden = false;
+      previewImage.style.display = 'block';
+      previewImage.alt = 'Selected post image';
+      // Prefer the already-decoded picker thumbnail — no network round-trip
+      if (sourceImg && sourceImg.complete && sourceImg.naturalWidth) {
+        previewImage.src = sourceImg.currentSrc || sourceImg.src;
+      } else {
+        previewImage.src = url;
+      }
+    }
+    if (media) media.classList.add('has-image');
+  }
+
+  function selectOption(btn, path, url) {
+    if (!btn || !optionsEl) return;
+    optionsEl.querySelectorAll('.ai-image-option').forEach(function (el) {
+      el.classList.remove('is-selected');
+      el.setAttribute('aria-pressed', 'false');
+    });
+    btn.classList.add('is-selected');
+    btn.setAttribute('aria-pressed', 'true');
+    if (generatedPath) generatedPath.value = path || '';
+    if (regenerate) regenerate.checked = true;
+    var thumb = btn.querySelector('img');
+    showImage(url || (thumb && (thumb.currentSrc || thumb.src)), thumb);
+    if (aiStatus) aiStatus.textContent = 'Image selected — save the post to keep it.';
+  }
+
+  function renderOptions(images) {
+    if (!picker || !optionsEl) return;
+    optionsEl.innerHTML = '';
+    if (!images || !images.length) {
+      picker.hidden = true;
+      return;
+    }
+
+    images.forEach(function (img, index) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ai-image-option';
+      btn.setAttribute('aria-label', 'Select image ' + (index + 1));
+      btn.setAttribute('aria-pressed', 'false');
+      btn.dataset.path = img.path || '';
+      btn.dataset.url = img.url || '';
+
+      var image = document.createElement('img');
+      image.src = img.url;
+      image.alt = 'Option ' + (index + 1);
+      image.draggable = false;
+      image.decoding = 'async';
+      btn.appendChild(image);
+      optionsEl.appendChild(btn);
+    });
+
+    picker.hidden = false;
+
+    var first = optionsEl.querySelector('.ai-image-option');
+    if (first) {
+      var firstImg = first.querySelector('img');
+      // When the first thumb finishes loading, sync preview (instant thereafter)
+      if (firstImg && !firstImg.complete) {
+        firstImg.addEventListener('load', function onFirst() {
+          firstImg.removeEventListener('load', onFirst);
+          if (first.classList.contains('is-selected')) {
+            selectOption(first, first.dataset.path, first.dataset.url);
+          }
+        });
+      }
+      selectOption(first, first.dataset.path, first.dataset.url);
+    }
+  }
+
+  if (optionsEl) {
+    optionsEl.addEventListener('click', function (event) {
+      var btn = event.target.closest('.ai-image-option');
+      if (!btn || !optionsEl.contains(btn)) return;
+      event.preventDefault();
+      selectOption(btn, btn.dataset.path, btn.dataset.url);
+    });
+  }
+
+  function updateText() {
+    if (previewDesc) {
+      previewDesc.textContent = description ? description.value : '';
+      previewDesc.hidden = !(description && description.value.trim());
+    }
+    if (previewCaption) {
+      previewCaption.textContent = caption ? caption.value : '';
+      previewCaption.hidden = !(caption && caption.value.trim());
+    }
+  }
+
+  function updateScheduleUI() {
+    var selected = document.querySelector('input[name="publish_action"]:checked');
+    var isSchedule = selected && selected.value === 'schedule';
+    if (scheduleField) scheduleField.style.display = isSchedule ? 'block' : 'none';
+    if (previewStatus) {
+      previewStatus.textContent = isSchedule ? 'Scheduled preview' : 'Publish now preview';
+    }
+    if (previewSchedule) {
+      if (isSchedule && scheduledAt && scheduledAt.value) {
+        var d = new Date(scheduledAt.value);
+        previewSchedule.textContent = isNaN(d.getTime()) ? 'Pick a schedule time' : ('Goes live: ' + d.toLocaleString());
+      } else if (!isSchedule) {
+        previewSchedule.textContent = 'Publishes immediately';
+      } else {
+        previewSchedule.textContent = 'Pick a schedule time';
+      }
+    }
+  }
+
+  if (description) description.addEventListener('input', updateText);
+  if (caption) caption.addEventListener('input', updateText);
+  if (scheduledAt) scheduledAt.addEventListener('change', updateScheduleUI);
+  document.querySelectorAll('input[name="publish_action"]').forEach(function (el) {
+    el.addEventListener('change', updateScheduleUI);
+  });
+
+  if (generateBtn) {
+    generateBtn.addEventListener('click', function () {
+      var prompt = imagePrompt ? imagePrompt.value.trim() : '';
+      if (!prompt) {
+        if (aiStatus) aiStatus.textContent = 'Enter an image prompt first.';
+        return;
+      }
+      generateBtn.disabled = true;
+      if (aiStatus) aiStatus.textContent = 'Generating with OpenAI… wait up to a minute.';
+      if (picker) picker.hidden = true;
+      if (optionsEl) optionsEl.innerHTML = '';
+      if (generatedPath) generatedPath.value = '';
+
+      var body = new FormData();
+      body.append('prompt', prompt);
+      body.append('csrfmiddlewaretoken', csrfToken());
+
+      fetch('{% url "posts:generate_image" %}', {
+        method: 'POST',
+        body: body,
+        credentials: 'same-origin',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json'
+        }
+      })
+        .then(parseJsonResponse)
+        .then(function (result) {
+          if (!result.ok || !result.data.ok) {
+            throw new Error((result.data && result.data.error) || 'Generation failed.');
+          }
+          var imgs = result.data.images || [];
+          if (imgs.length < 1) {
+            throw new Error('No OpenAI images returned.');
+          }
+          renderOptions(imgs);
+          if (aiStatus) aiStatus.textContent = 'OpenAI images ready — pick one.';
+        })
+        .catch(function (err) {
+          if (picker) picker.hidden = true;
+          if (optionsEl) optionsEl.innerHTML = '';
+          if (generatedPath) generatedPath.value = '';
+          if (aiStatus) aiStatus.textContent = err.message || 'Generation failed.';
+        })
+        .finally(function () {
+          generateBtn.disabled = false;
+        });
+    });
+  }
+
+  updateText();
+  updateScheduleUI();
+
+  document.querySelectorAll('.platform-card').forEach(function (card) {
+    var input = card.querySelector('input[type="checkbox"]');
+    if (!input) return;
+    function sync() {
+      card.classList.toggle('is-selected', input.checked && !input.disabled);
+    }
+    input.addEventListener('change', sync);
+    sync();
+  });
+})();
+</script>
+{% endblock %}

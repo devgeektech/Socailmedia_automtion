@@ -1,0 +1,68 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Admin — SocialFlow{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/glass.css' %}">
+  {% block extra_css %}{% endblock %}
+</head>
+<body class="admin-body">
+  <div class="bg-blobs">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  {% if messages %}
+  <div class="messages-container">
+    {% for message in messages %}
+    <div class="glass-card message-toast">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="admin-shell">
+    <aside class="admin-sidebar glass-card">
+      <a href="{% url 'dashboard:home' %}" class="logo" style="margin-bottom:1.75rem;">
+        <div class="logo-icon">◈</div>
+        <span class="logo-text">SocialFlow</span>
+      </a>
+      <p class="admin-sidebar-label">Superadmin</p>
+      <nav class="admin-nav">
+        <a href="{% url 'dashboard:home' %}" class="admin-nav-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}">
+          Overview
+        </a>
+        <a href="{% url 'dashboard:users' %}" class="admin-nav-link {% if 'user' in request.resolver_match.url_name %}active{% endif %}">
+          Users
+        </a>
+        <a href="{% url 'dashboard:subscriptions' %}" class="admin-nav-link {% if 'subscription' in request.resolver_match.url_name %}active{% endif %}">
+          Subscriptions
+        </a>
+        <a href="{% url 'dashboard:posts' %}" class="admin-nav-link {% if 'post' in request.resolver_match.url_name %}active{% endif %}">
+          Posts
+        </a>
+      </nav>
+      <div class="admin-sidebar-footer">
+        <div class="admin-user-chip">
+          <strong>{{ request.user.get_full_name|default:request.user.email }}</strong>
+          <span>Superadmin</span>
+        </div>
+        <form method="post" action="{% url 'dashboard:logout' %}">
+          {% csrf_token %}
+          <button type="submit" class="btn-secondary admin-logout-btn">Sign out</button>
+        </form>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      {% block admin_content %}{% endblock %}
+    </main>
+  </div>
+  {% block extra_js %}{% endblock %}
+</body>
+</html>
