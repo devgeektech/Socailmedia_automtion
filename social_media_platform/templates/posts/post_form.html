@@ -141,7 +141,7 @@
         <button type="submit" class="btn-primary" style="width:auto;">
           {% if is_edit %}Save changes{% else %}Create post{% endif %}
         </button>
-        <a href="{% url 'subscriptions:dashboard' %}" class="btn-secondary">Cancel</a>
+        <a href="{% url 'subscriptions:dashboard' %}" class="btn-secondary js-clear-draft" id="btn-cancel-post">Cancel</a>
       </div>
     </form>
 
@@ -477,6 +477,38 @@
   if (form) {
     form.addEventListener('submit', function () { clearDraft(); });
   }
+
+  document.querySelectorAll('.js-clear-draft').forEach(function (link) {
+    link.addEventListener('click', function () {
+      clearDraft();
+      if (form) form.reset();
+      if (generatedPath) generatedPath.value = '';
+      if (optionsEl) optionsEl.innerHTML = '';
+      if (picker) picker.hidden = true;
+      if (aiStatus) aiStatus.textContent = '';
+      setGenerating(false);
+      if (previewImage) {
+        previewImage.removeAttribute('src');
+        previewImage.hidden = true;
+        previewImage.style.display = '';
+      }
+      if (previewPlaceholder) {
+        previewPlaceholder.removeAttribute('hidden');
+        previewPlaceholder.style.display = '';
+      }
+      var media = document.getElementById('preview-media');
+      if (media) media.classList.remove('has-image');
+      if (previewDesc) {
+        previewDesc.textContent = '';
+        previewDesc.hidden = true;
+      }
+      if (previewCaption) {
+        previewCaption.textContent = '';
+        previewCaption.hidden = true;
+      }
+    });
+  });
+
 
   if (generateBtn) {
     generateBtn.addEventListener('click', function () {
