@@ -6,6 +6,7 @@ import base64
 import logging
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 
 import httpx
 from django.conf import settings
@@ -16,10 +17,35 @@ logger = logging.getLogger(__name__)
 OPENAI_IMAGES_URL = 'https://api.openai.com/v1/images/generations'
 # Reject placeholders / corrupt tiny files (real gpt-image-1 outputs are ~1–3MB)
 MIN_IMAGE_BYTES = 50_000
+STATIC_AI_SAMPLES_DIR = Path(__file__).resolve().parent / 'static_ai_samples'
+STATIC_AI_SAMPLE_NAMES = ('sample_01.jpg', 'sample_02.jpg', 'sample_03.jpg')
 
 
 class ImageGenerationError(Exception):
     """Raised when AI image generation fails."""
+
+
+def _static_image_files(count: int = 3) -> list[ContentFile]:
+    """Return bundled professional sample images (testing without OpenAI)."""
+    files: list[ContentFile] = []
+    for name in STATIC_AI_SAMPLE_NAMES[:count]:
+        path = STATIC_AI_SAMPLES_DIR / name
+        if not path.is_file():
+            raise ImageGenerationError(
+                f'Static AI sample missing: {path.name}. '
+                'Add files under posts/static_ai_samples/ or set USE_STATIC_AI_IMAGES=False.'
+            )
+        data = path.read_bytes()
+        if len(data) < MIN_IMAGE_BYTES:
+            raise ImageGenerationError(
+                f'Static AI sample too small ({path.name}, {len(data)} bytes).'
+            )
+        ext = path.suffix.lower() or '.jpg'
+        files.append(ContentFile(data, name=f'ai_static_{uuid.uuid4().hex}{ext}'))
+    if len(files) < count:
+        raise ImageGenerationError('Not enough static AI sample images configured.')
+    logger.info('Using %s static sample image(s) (USE_STATIC_AI_IMAGES=True)', len(files))
+    return files
 
 
 def _api_key() -> str:
@@ -119,12 +145,16 @@ def generate_image_files(prompt: str, count: int = 3) -> list[ContentFile]:
     """
     Generate exactly `count` OpenAI images.
     Raises if any image fails or is too small — never returns placeholders.
+    When USE_STATIC_AI_IMAGES=True, returns bundled sample images (no API calls).
     """
     prompt = (prompt or '').strip()
     if not prompt:
         raise ImageGenerationError('Image prompt cannot be empty.')
 
     count = max(1, min(int(count), 4))
+
+    if getattr(settings, 'USE_STATIC_AI_IMAGES', False):
+        return _static_image_files(count=min(count, len(STATIC_AI_SAMPLE_NAMES)))
 
     model = getattr(settings, 'OPENAI_IMAGE_MODEL', 'gpt-image-1') or 'gpt-image-1'
     size = getattr(settings, 'OPENAI_IMAGE_SIZE', '1536x1024') or '1536x1024'

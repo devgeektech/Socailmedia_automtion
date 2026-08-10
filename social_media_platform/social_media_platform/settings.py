@@ -205,8 +205,10 @@ OPENAI_IMAGE_MODEL = (os.getenv('OPENAI_IMAGE_MODEL') or 'gpt-image-1').strip()
 # Landscape social-feed size (shorter than square 1024x1024)
 OPENAI_IMAGE_SIZE = (os.getenv('OPENAI_IMAGE_SIZE') or '1536x1024').strip()
 OPENAI_IMAGE_QUALITY = (os.getenv('OPENAI_IMAGE_QUALITY') or 'medium').strip()
-# Kept for compatibility; static placeholders are removed — always uses OpenAI
-USE_STATIC_AI_IMAGES = False
+# True = use 3 bundled sample images (no OpenAI tokens). False = real OpenAI generation.
+USE_STATIC_AI_IMAGES = os.getenv('USE_STATIC_AI_IMAGES', 'False').strip().lower() in {
+    '1', 'true', 'yes', 'on',
+}
 
 # Meta (Facebook / Instagram) Graph API
 META_APP_ID = (os.getenv('META_APP_ID') or '').strip()
