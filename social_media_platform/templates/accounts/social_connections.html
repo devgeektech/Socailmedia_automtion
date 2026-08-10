@@ -13,7 +13,11 @@
       <p class="platform-note" style="margin:0.35rem 0 0;">Connect your own Facebook Page and Instagram to publish posts.</p>
     </div>
     <div class="dashboard-actions">
+      {% if return_next %}
+      <a href="{{ return_next }}" class="btn-secondary">Back to post</a>
+      {% else %}
       <a href="{% url 'subscriptions:dashboard' %}" class="btn-secondary">Back to Dashboard</a>
+      {% endif %}
     </div>
   </div>
 
@@ -35,14 +39,14 @@
     </div>
     <div class="social-row-actions">
       {% if facebook_ready %}
-      <a href="{% url 'accounts:meta_connect' %}?for=facebook" class="btn-secondary">Reconnect</a>
+      <a href="{% url 'accounts:meta_connect' %}?for=facebook{{ next_query }}" class="btn-secondary">Reconnect</a>
       <form method="post" action="{% url 'accounts:meta_disconnect' %}">
         {% csrf_token %}
         <input type="hidden" name="target" value="all">
         <button type="submit" class="btn-secondary">Disconnect</button>
       </form>
       {% else %}
-      <a href="{% url 'accounts:meta_connect' %}?for=facebook" class="btn-primary">Connect Facebook</a>
+      <a href="{% url 'accounts:meta_connect' %}?for=facebook{{ next_query }}" class="btn-primary">Connect Facebook</a>
       {% endif %}
     </div>
   </div>
@@ -61,16 +65,16 @@
     </div>
     <div class="social-row-actions">
       {% if instagram_ready %}
-      <a href="{% url 'accounts:meta_connect' %}?for=instagram" class="btn-secondary">Reconnect</a>
+      <a href="{% url 'accounts:meta_connect' %}?for=instagram{{ next_query }}" class="btn-secondary">Reconnect</a>
       <form method="post" action="{% url 'accounts:meta_disconnect' %}">
         {% csrf_token %}
         <input type="hidden" name="target" value="instagram">
         <button type="submit" class="btn-secondary">Disconnect</button>
       </form>
       {% elif facebook_ready %}
-      <a href="{% url 'accounts:meta_connect' %}?for=instagram" class="btn-primary">Connect Instagram</a>
+      <a href="{% url 'accounts:meta_connect' %}?for=instagram{{ next_query }}" class="btn-primary">Connect Instagram</a>
       {% else %}
-      <a href="{% url 'accounts:meta_connect' %}?for=facebook" class="btn-secondary">Connect Facebook first</a>
+      <a href="{% url 'accounts:meta_connect' %}?for=facebook{{ next_query }}" class="btn-secondary">Connect Facebook first</a>
       {% endif %}
     </div>
   </div>

@@ -101,6 +101,25 @@ def _oauth_redirect_uri(request) -> str:
     return request.build_absolute_uri(reverse('accounts:meta_callback'))
 
 
+def _store_meta_next(request) -> None:
+    """Remember where to return after Meta connect (e.g. create post form)."""
+    if 'next' not in request.GET:
+        return
+    nxt = (request.GET.get('next') or '').strip()
+    if nxt.startswith('/') and not nxt.startswith('//'):
+        request.session['meta_oauth_next'] = nxt
+    else:
+        request.session.pop('meta_oauth_next', None)
+
+
+def _meta_return_redirect(request):
+    """Redirect back to create-post (or social connections) after Meta OAuth."""
+    nxt = request.session.pop('meta_oauth_next', None)
+    if nxt and isinstance(nxt, str) and nxt.startswith('/') and not nxt.startswith('//'):
+        return redirect(nxt)
+    return redirect('accounts:social_connections')
+
+
 def _finish_page_selection(request, *, pages: list[dict], purpose: str, fb_user_id: str, user_token: str):
     """Auto-pick one page or send the user to the page picker."""
     from posts.meta import MetaAPIError, serialize_pages_for_session
@@ -128,7 +147,7 @@ def _finish_page_selection(request, *, pages: list[dict], purpose: str, fb_user_
             user_token=user_token,
         )
         _success_messages(request, profile, purpose=purpose)
-        return redirect('accounts:social_connections')
+        return _meta_return_redirect(request)
 
     request.session['meta_pending_pages'] = serialized
     request.session['meta_pending_fb_user_id'] = fb_user_id
@@ -158,6 +177,13 @@ def social_connections_view(request):
     """User-facing Facebook / Instagram connection status."""
     from posts.meta import meta_configured
 
+    if 'next' in request.GET:
+        _store_meta_next(request)
+    else:
+        request.session.pop('meta_oauth_next', None)
+    nxt = request.session.get('meta_oauth_next') or ''
+    next_q = f'&next={nxt}' if nxt else ''
+
     profile = _ensure_profile(request.user)
     return render(request, 'accounts/social_connections.html', {
         'profile': profile,
@@ -165,6 +191,8 @@ def social_connections_view(request):
         'facebook_ready': profile.facebook_ready,
         'instagram_ready': profile.instagram_ready,
         'oauth_redirect_uri': _oauth_redirect_uri(request),
+        'next_query': next_q,
+        'return_next': nxt,
     })
 
 
@@ -184,12 +212,14 @@ def meta_connect_view(request):
     if purpose not in {'facebook', 'instagram'}:
         purpose = 'facebook'
 
+    _store_meta_next(request)
+
     if not meta_configured():
         messages.error(
             request,
             'Facebook Login is not configured yet. Ask the site admin to set META_APP_ID and META_APP_SECRET.',
         )
-        return redirect('accounts:social_connections')
+        return _meta_return_redirect(request)
 
     profile = _ensure_profile(request.user)
 
@@ -211,7 +241,7 @@ def meta_connect_view(request):
                 request,
                 f'Connected Instagram (@{label}) to Page “{profile.facebook_page_name or "your Page"}”.',
             )
-            return redirect('accounts:social_connections')
+            return _meta_return_redirect(request)
 
         # Try other Pages via stored user token before full OAuth
         if profile.facebook_user_access_token:
@@ -251,7 +281,7 @@ def meta_connect_view(request):
         )
     except MetaAPIError as exc:
         messages.error(request, str(exc))
-        return redirect('accounts:social_connections')
+        return _meta_return_redirect(request)
     return redirect(url)
 
 
@@ -271,18 +301,18 @@ def meta_callback_view(request):
     error = request.GET.get('error_description') or request.GET.get('error')
     if error:
         messages.error(request, f'Meta connection cancelled: {error}')
-        return redirect('accounts:social_connections')
+        return _meta_return_redirect(request)
 
     state = request.GET.get('state')
     expected = request.session.pop('meta_oauth_state', None)
     if not state or not expected or state != expected:
         messages.error(request, 'Invalid Meta OAuth state. Please try connecting again.')
-        return redirect('accounts:social_connections')
+        return _meta_return_redirect(request)
 
     code = request.GET.get('code')
     if not code:
         messages.error(request, 'Meta did not return an authorization code.')
-        return redirect('accounts:social_connections')
+        return _meta_return_redirect(request)
 
     # Must use the same redirect_uri that started OAuth (stored in session)
     redirect_uri = request.session.pop('meta_oauth_redirect_uri', None) or _oauth_redirect_uri(request)
@@ -301,11 +331,11 @@ def meta_callback_view(request):
         )
     except MetaAPIError as exc:
         messages.error(request, str(exc))
-        return redirect('accounts:social_connections')
+        return _meta_return_redirect(request)
     except Exception:
         logger.exception('Meta OAuth callback failed')
         messages.error(request, 'Could not complete Meta connection. Please try again.')
-        return redirect('accounts:social_connections')
+        return _meta_return_redirect(request)
 
 
 @login_required
@@ -316,7 +346,7 @@ def meta_select_page_view(request):
     purpose = request.session.get('meta_oauth_purpose') or 'facebook'
     if not pages:
         messages.error(request, 'No Pages pending. Start Connect Facebook or Connect Instagram again.')
-        return redirect('accounts:social_connections')
+        return _meta_return_redirect(request)
 
     if request.method == 'POST':
         page_id = (request.POST.get('page_id') or '').strip()
@@ -342,7 +372,7 @@ def meta_select_page_view(request):
         request.session.pop('meta_pending_pages', None)
         request.session.pop('meta_oauth_purpose', None)
         _success_messages(request, profile, purpose=purpose)
-        return redirect('accounts:social_connections')
+        return _meta_return_redirect(request)
 
     return render(request, 'accounts/meta_select_page.html', {
         'pages': pages,
@@ -363,7 +393,3 @@ def meta_disconnect_view(request):
         profile.clear_meta_connection()
         messages.success(request, 'Facebook and Instagram disconnected.')
     return redirect('accounts:social_connections')
-
-
-
-   
