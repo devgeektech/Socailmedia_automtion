@@ -363,3 +363,7 @@ def meta_disconnect_view(request):
         profile.clear_meta_connection()
         messages.success(request, 'Facebook and Instagram disconnected.')
     return redirect('accounts:social_connections')
+
+
+
+   
