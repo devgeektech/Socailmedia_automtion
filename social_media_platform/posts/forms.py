@@ -100,6 +100,9 @@ class PostForm(forms.ModelForm):
             self.fields['publish_to_facebook'].help_text = (
                 'Connect Facebook from Social Connections first.'
             )
+        elif not instance:
+            # New posts: Facebook selected by default when connected
+            self.fields['publish_to_facebook'].initial = True
         if not ig_ready:
             self.fields['publish_to_instagram'].disabled = True
             self.fields['publish_to_instagram'].help_text = (
@@ -145,6 +148,10 @@ class PostForm(forms.ModelForm):
         return cleaned
 
     def apply_publish_action(self, post):
+        """
+        Publish now → send to selected platforms (Facebook/Instagram) immediately.
+        Schedule → save for the background publisher at scheduled_at (no manual click).
+        """
         from .meta import MetaAPIError
         from .publisher import publish_post
 
@@ -152,6 +159,7 @@ class PostForm(forms.ModelForm):
         if action == self.PUBLISH_NOW:
             try:
                 publish_post(post)
+                post.refresh_from_db()
             except MetaAPIError:
                 post.status = Post.STATUS_FAILED
                 post.save(update_fields=['status', 'updated_at'])

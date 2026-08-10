@@ -1492,8 +1492,17 @@ body {
 
 .meta-connect-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 0.65rem;
+}
+
+.meta-connect-actions .btn-primary,
+.meta-connect-actions .btn-secondary {
+  width: auto;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .social-row {

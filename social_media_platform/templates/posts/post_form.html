@@ -74,24 +74,22 @@
         {% if not facebook_ready and not instagram_ready %}
         <p class="platform-note">
           <a href="{% url 'accounts:social_connections' %}">Connect Facebook &amp; Instagram</a>
-          first, then choose where to publish. Facebook posts go to your Page (not your personal profile).
-        </p>
-        {% elif facebook_ready and not instagram_ready %}
-        <p class="platform-note">
-          Facebook is ready.
-          <a href="{% url 'accounts:meta_connect' %}?for=instagram">Connect Instagram</a>
-          to publish there too (Instagram needs a public HTTPS image URL).
+          first, then choose where to publish.
         </p>
         {% else %}
-        <p class="platform-note">Tap Instagram and/or Facebook. Posts go to your connected Page / Instagram feed.</p>
+        <p class="platform-note">
+          Select Facebook and/or Instagram.
+          <strong>Publish immediately</strong> sends now;
+          <strong>Schedule</strong> sends automatically at the chosen time (no extra click on the post list).
+        </p>
         {% endif %}
         <div class="platform-cards">
-          <label class="platform-card{% if not facebook_ready %} is-disabled{% endif %}{% if form.publish_to_facebook.value %} is-selected{% endif %}">
+          <label class="platform-card{% if not facebook_ready %} is-disabled{% endif %}{% if form.publish_to_facebook.value or form.publish_to_facebook.initial %} is-selected{% endif %}">
             {{ form.publish_to_facebook }}
             <span class="platform-card-icon platform-card-icon-fb" aria-hidden="true">f</span>
             <span class="platform-card-copy">
               <strong>Facebook</strong>
-              <small>{% if facebook_ready %}Publish to your Page{% else %}Connect Facebook first{% endif %}</small>
+              <small>{% if facebook_ready %}Auto-post to your Page{% else %}Connect Facebook first{% endif %}</small>
             </span>
           </label>
           <label class="platform-card{% if not instagram_ready %} is-disabled{% endif %}{% if form.publish_to_instagram.value %} is-selected{% endif %}">
@@ -99,7 +97,7 @@
             <span class="platform-card-icon platform-card-icon-ig" aria-hidden="true">ig</span>
             <span class="platform-card-copy">
               <strong>Instagram</strong>
-              <small>{% if instagram_ready %}Publish to your feed{% else %}Connect Instagram first{% endif %}</small>
+              <small>{% if instagram_ready %}Auto-post to your feed{% else %}Connect Instagram first{% endif %}</small>
             </span>
           </label>
         </div>

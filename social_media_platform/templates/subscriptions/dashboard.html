@@ -162,23 +162,6 @@
                 </a>
                 {% endif %}
 
-                {% if post.image %}
-                {% if facebook_ready and not post.facebook_post_id %}
-                <form method="post" action="{% url 'posts:publish_platform' post.pk %}">
-                  {% csrf_token %}
-                  <input type="hidden" name="platform" value="facebook">
-                  <button type="submit" class="icon-btn platform-publish-fb" title="Publish to Facebook" aria-label="Publish to Facebook">f</button>
-                </form>
-                {% endif %}
-                {% if instagram_ready and not post.instagram_media_id %}
-                <form method="post" action="{% url 'posts:publish_platform' post.pk %}">
-                  {% csrf_token %}
-                  <input type="hidden" name="platform" value="instagram">
-                  <button type="submit" class="icon-btn platform-publish-ig" title="Publish to Instagram" aria-label="Publish to Instagram">ig</button>
-                </form>
-                {% endif %}
-                {% endif %}
-
                 <form method="post"
                       action="{% url 'posts:delete' post.pk %}"
                       onsubmit="return confirm('Delete this post?');">

@@ -183,15 +183,38 @@ def post_create_view(request):
                     raise
                 if post.status == Post.STATUS_PUBLISHED:
                     parts = ['Post published successfully.']
-                    if post.facebook_post_id:
-                        parts.append(
-                            f'Facebook Page: https://www.facebook.com/{post.facebook_post_id}'
-                        )
-                    if post.instagram_media_id:
-                        parts.append('Instagram: published to your connected feed.')
+                    if post.publish_to_facebook:
+                        if post.facebook_post_id:
+                            parts.append(
+                                f'Posted to Facebook: https://www.facebook.com/{post.facebook_post_id}'
+                            )
+                        else:
+                            parts.append('Facebook was selected but no post id was returned — check connection.')
+                    if post.publish_to_instagram:
+                        if post.instagram_media_id:
+                            parts.append('Posted to Instagram.')
+                        else:
+                            parts.append('Instagram was selected but publish did not complete.')
                     messages.success(request, ' '.join(parts))
                 else:
-                    messages.success(request, 'Post scheduled successfully.')
+                    from django.utils import timezone as dj_tz
+
+                    platforms = []
+                    if post.publish_to_facebook:
+                        platforms.append('Facebook')
+                    if post.publish_to_instagram:
+                        platforms.append('Instagram')
+                    when = post.scheduled_at
+                    if platforms and when:
+                        local_when = dj_tz.localtime(when)
+                        messages.success(
+                            request,
+                            f'Scheduled for {" & ".join(platforms)} at '
+                            f'{local_when.strftime("%d %b %Y, %I:%M %p")}. '
+                            'It will post automatically — no extra click needed.',
+                        )
+                    else:
+                        messages.success(request, 'Post scheduled successfully.')
                 return redirect('subscriptions:dashboard')
     else:
         form = PostForm(user=request.user)

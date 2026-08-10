@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 _started = False
 _lock = threading.Lock()
-POLL_SECONDS = 30
+POLL_SECONDS = 20
 
 
 def start_publish_scheduler():
