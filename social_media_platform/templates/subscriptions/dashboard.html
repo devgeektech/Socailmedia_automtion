@@ -194,3 +194,22 @@
   </div>
 </div>
 {% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  try {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('clear_post_draft') !== '1') return;
+    Object.keys(sessionStorage).forEach(function (key) {
+      if (key.indexOf('socialflow_post_draft_') === 0) {
+        sessionStorage.removeItem(key);
+      }
+    });
+    params.delete('clear_post_draft');
+    var next = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+    window.history.replaceState({}, '', next);
+  } catch (err) { /* ignore */ }
+})();
+</script>
+{% endblock %}

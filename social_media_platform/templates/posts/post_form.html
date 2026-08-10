@@ -475,7 +475,31 @@
   });
 
   if (form) {
-    form.addEventListener('submit', function () { clearDraft(); });
+    form.addEventListener('submit', function (event) {
+      // Keep draft + images if server validation fails and re-renders the form.
+      saveDraft();
+
+      var selected = document.querySelector('input[name="publish_action"]:checked');
+      if (selected && selected.value === 'schedule') {
+        var when = scheduledAt ? scheduledAt.value.trim() : '';
+        if (!when) {
+          event.preventDefault();
+          if (aiStatus) aiStatus.textContent = '';
+          var errEl = document.querySelector('#schedule-field .form-error');
+          if (!errEl && scheduleField) {
+            errEl = document.createElement('p');
+            errEl.className = 'form-error js-client-schedule-error';
+            scheduleField.appendChild(errEl);
+          }
+          if (errEl) errEl.textContent = 'Pick a date and time to schedule this post.';
+          if (scheduleField) scheduleField.style.display = 'block';
+          if (scheduledAt) scheduledAt.focus();
+          return;
+        }
+        var clientErr = document.querySelector('.js-client-schedule-error');
+        if (clientErr) clientErr.remove();
+      }
+    });
   }
 
   document.querySelectorAll('.js-clear-draft').forEach(function (link) {
@@ -564,6 +588,11 @@
   setGenerating(false);
   suppressDraftSave = true;
   restoreDraft();
+  // After a failed submit, hidden path may still be set — keep preview even if draft was empty of thumbs
+  if (generatedPath && generatedPath.value && previewImage && (previewImage.hidden || !previewImage.src)) {
+    var mediaPath = generatedPath.value.replace(/^\/+/, '');
+    showImage('{{ MEDIA_URL|default:"/media/" }}' + mediaPath);
+  }
   updateText();
   updateScheduleUI();
   suppressDraftSave = false;

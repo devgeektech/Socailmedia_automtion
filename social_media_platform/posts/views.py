@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.core.files import File
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from .ai_images import ImageGenerationError, generate_image_file, generate_image_files
@@ -179,7 +180,7 @@ def post_create_view(request):
                     from .meta import MetaAPIError
                     if isinstance(exc, MetaAPIError):
                         messages.error(request, str(exc))
-                        return redirect('subscriptions:dashboard')
+                        return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
                     raise
                 if post.status == Post.STATUS_PUBLISHED:
                     parts = ['Post published successfully.']
@@ -215,7 +216,7 @@ def post_create_view(request):
                         )
                     else:
                         messages.success(request, 'Post scheduled successfully.')
-                return redirect('subscriptions:dashboard')
+                return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
     else:
         form = PostForm(user=request.user)
 
@@ -256,10 +257,10 @@ def post_edit_view(request, pk):
                     from .meta import MetaAPIError
                     if isinstance(exc, MetaAPIError):
                         messages.error(request, str(exc))
-                        return redirect('subscriptions:dashboard')
+                        return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
                     raise
                 messages.success(request, 'Post updated successfully.')
-                return redirect('subscriptions:dashboard')
+                return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
     else:
         form = PostForm(instance=post, user=request.user)
 
