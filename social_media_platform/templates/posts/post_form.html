@@ -183,6 +183,7 @@
 <script>
 (function () {
   var DRAFT_KEY = 'socialflow_post_draft_{% if is_edit %}edit_{{ post.pk }}{% else %}create{% endif %}';
+  var DRAFT_RETURN_KEY = DRAFT_KEY + '_from_connect';
   var form = document.getElementById('post-form');
   var description = document.getElementById('id_description');
   var caption = document.getElementById('id_caption');
@@ -197,6 +198,7 @@
   var regenerate = document.getElementById('id_regenerate_image');
   var picker = document.getElementById('ai-image-picker');
   var optionsEl = document.getElementById('ai-image-options');
+  var suppressDraftSave = false;
 
   var previewDesc = document.getElementById('preview-description');
   var previewCaption = document.getElementById('preview-caption');
@@ -212,29 +214,52 @@
     return match ? decodeURIComponent(match[1]) : '';
   }
 
+  function draftHasContent(draft) {
+    if (!draft || typeof draft !== 'object') return false;
+    return !!(
+      (draft.description && String(draft.description).trim()) ||
+      (draft.caption && String(draft.caption).trim()) ||
+      (draft.image_prompt && String(draft.image_prompt).trim()) ||
+      (draft.generated_image_path && String(draft.generated_image_path).trim()) ||
+      (draft.preview_image_url && String(draft.preview_image_url).trim()) ||
+      (Array.isArray(draft.images) && draft.images.length > 0) ||
+      (draft.scheduled_at && String(draft.scheduled_at).trim()) ||
+      draft.publish_action === 'schedule'
+    );
+  }
+
+  function buildDraft() {
+    var publishAction = document.querySelector('input[name="publish_action"]:checked');
+    var fb = document.querySelector('input[name="publish_to_facebook"]');
+    var ig = document.querySelector('input[name="publish_to_instagram"]');
+    var images = [];
+    if (optionsEl) {
+      optionsEl.querySelectorAll('.ai-image-option').forEach(function (btn) {
+        images.push({ path: btn.dataset.path || '', url: btn.dataset.url || '' });
+      });
+    }
+    return {
+      description: description ? description.value : '',
+      caption: caption ? caption.value : '',
+      image_prompt: imagePrompt ? imagePrompt.value : '',
+      generated_image_path: generatedPath ? generatedPath.value : '',
+      scheduled_at: scheduledAt ? scheduledAt.value : '',
+      publish_action: publishAction ? publishAction.value : 'publish_now',
+      publish_to_facebook: !!(fb && fb.checked),
+      publish_to_instagram: !!(ig && ig.checked),
+      preview_image_url: previewImage && !previewImage.hidden ? (previewImage.currentSrc || previewImage.src) : '',
+      images: images,
+    };
+  }
+
   function saveDraft() {
+    if (suppressDraftSave) return;
     try {
-      var publishAction = document.querySelector('input[name="publish_action"]:checked');
-      var fb = document.querySelector('input[name="publish_to_facebook"]');
-      var ig = document.querySelector('input[name="publish_to_instagram"]');
-      var images = [];
-      if (optionsEl) {
-        optionsEl.querySelectorAll('.ai-image-option').forEach(function (btn) {
-          images.push({ path: btn.dataset.path || '', url: btn.dataset.url || '' });
-        });
+      var draft = buildDraft();
+      if (!draftHasContent(draft)) {
+        sessionStorage.removeItem(DRAFT_KEY);
+        return;
       }
-      var draft = {
-        description: description ? description.value : '',
-        caption: caption ? caption.value : '',
-        image_prompt: imagePrompt ? imagePrompt.value : '',
-        generated_image_path: generatedPath ? generatedPath.value : '',
-        scheduled_at: scheduledAt ? scheduledAt.value : '',
-        publish_action: publishAction ? publishAction.value : 'publish_now',
-        publish_to_facebook: !!(fb && fb.checked),
-        publish_to_instagram: !!(ig && ig.checked),
-        preview_image_url: previewImage && !previewImage.hidden ? (previewImage.currentSrc || previewImage.src) : '',
-        images: images,
-      };
       sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
     } catch (err) { /* ignore quota / private mode */ }
   }
@@ -242,9 +267,14 @@
   function restoreDraft() {
     try {
       var raw = sessionStorage.getItem(DRAFT_KEY);
+      var fromConnect = sessionStorage.getItem(DRAFT_RETURN_KEY) === '1';
+      if (fromConnect) sessionStorage.removeItem(DRAFT_RETURN_KEY);
       if (!raw) return;
       var draft = JSON.parse(raw);
-      if (!draft || typeof draft !== 'object') return;
+      if (!draftHasContent(draft)) {
+        sessionStorage.removeItem(DRAFT_KEY);
+        return;
+      }
       if (description && !description.value && draft.description) description.value = draft.description;
       if (caption && !caption.value && draft.caption) caption.value = draft.caption;
       if (imagePrompt && !imagePrompt.value && draft.image_prompt) imagePrompt.value = draft.image_prompt;
@@ -267,14 +297,19 @@
       } else if (draft.preview_image_url) {
         showImage(draft.preview_image_url);
       }
-      if (aiStatus && (draft.description || draft.image_prompt || draft.images)) {
-        aiStatus.textContent = 'Draft restored after connecting accounts.';
+      if (aiStatus) {
+        aiStatus.textContent = fromConnect
+          ? 'Draft restored after connecting accounts.'
+          : 'Draft restored.';
       }
     } catch (err) { /* ignore */ }
   }
 
   function clearDraft() {
-    try { sessionStorage.removeItem(DRAFT_KEY); } catch (err) { /* ignore */ }
+    try {
+      sessionStorage.removeItem(DRAFT_KEY);
+      sessionStorage.removeItem(DRAFT_RETURN_KEY);
+    } catch (err) { /* ignore */ }
   }
 
   function setGenerating(isLoading) {
@@ -433,7 +468,10 @@
   });
 
   document.querySelectorAll('.js-save-draft-before-leave').forEach(function (link) {
-    link.addEventListener('click', function () { saveDraft(); });
+    link.addEventListener('click', function () {
+      saveDraft();
+      try { sessionStorage.setItem(DRAFT_RETURN_KEY, '1'); } catch (err) { /* ignore */ }
+    });
   });
 
   if (form) {
@@ -491,9 +529,13 @@
     });
   }
 
+  setGenerating(false);
+  suppressDraftSave = true;
   restoreDraft();
   updateText();
   updateScheduleUI();
+  suppressDraftSave = false;
+  saveDraft();
 
   document.querySelectorAll('.platform-card').forEach(function (card) {
     var input = card.querySelector('input[type="checkbox"]');

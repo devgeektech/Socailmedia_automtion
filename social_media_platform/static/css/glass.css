@@ -1272,9 +1272,21 @@ body {
 }
 
 .gen-btn-loading {
-  display: inline-flex;
+  display: none;
   align-items: center;
   gap: 0.45rem;
+}
+
+.gen-btn-loading[hidden] {
+  display: none !important;
+}
+
+.ai-image-actions .btn-secondary.is-loading .gen-btn-loading {
+  display: inline-flex;
+}
+
+.ai-image-actions .btn-secondary.is-loading .gen-btn-label {
+  display: none;
 }
 
 .ai-spinner {
