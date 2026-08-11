@@ -10,7 +10,7 @@
         <span class="logo-text">SocialFlow</span>
       </a>
       <h1 class="dashboard-title">Social Connections</h1>
-      <p class="platform-note" style="margin:0.35rem 0 0;">Connect Facebook and Instagram separately. Instagram uses Instagram Login — no Facebook account needed.</p>
+      <p class="platform-note" style="margin:0.35rem 0 0;">Connect Facebook and Instagram accounts</p>
     </div>
     <div class="dashboard-actions">
       {% if return_next %}
@@ -52,11 +52,11 @@
     <div class="social-row-copy">
       <h2>Instagram</h2>
       {% if instagram_ready %}
-      <p>Connected{% if profile.instagram_username %} as <strong>@{{ profile.instagram_username }}</strong>{% endif %} with Instagram Login. No Facebook account required.</p>
+      <p>Connected{% if profile.instagram_username %} as <strong>@{{ profile.instagram_username }}</strong>{% endif %} with Instagram Login.</p>
       {% elif not instagram_app_configured %}
       <p>Instagram Login is not configured yet. Ask the admin to set Instagram App ID and Secret.</p>
       {% else %}
-      <p>Not connected. Use Instagram Login with a Business or Creator account. Facebook is not required.</p>
+      <p>Not connected. Use Instagram Login with a Business or Creator account.</p>
       {% endif %}
     </div>
     <div class="social-row-actions">
