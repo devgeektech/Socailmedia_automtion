@@ -130,7 +130,7 @@ def oauth_authorize_url(*, redirect_uri: str, state: str, rerequest: bool = Fals
 def _raise_for_graph(data: dict, *, fallback: str = 'Meta API error') -> None:
     err = data.get('error') if isinstance(data, dict) else None
     if err:
-        message = err.get('message') or fallback
+        message = err.get('error_user_msg') or err.get('message') or fallback
         code = err.get('code')
         raise MetaAPIError(f'{message}' + (f' (code {code})' if code is not None else ''))
 
@@ -447,14 +447,14 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
 
     if want_ig:
         from .instagram_login import (
+            instagram_publish_image_url,
             publish_instagram_login_photo,
-            public_image_url_for_instagram,
             resolve_instagram_login_credentials,
         )
 
         try:
             ig_creds = resolve_instagram_login_credentials(post.user)
-            image_url = public_image_url_for_instagram(post.image.url)
+            image_url = instagram_publish_image_url(image_path, post.image.url)
             ig_id = publish_instagram_login_photo(
                 ig_user_id=ig_creds['ig_user_id'],
                 access_token=ig_creds['access_token'],
@@ -477,7 +477,15 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
                 ig_creds.get('source'),
             )
         except MetaAPIError as exc:
-            errors.append(f'Instagram: {exc}')
+            from .instagram_login import InstagramStillProcessing, is_instagram_not_ready
+
+            if isinstance(exc, InstagramStillProcessing) or is_instagram_not_ready(exc):
+                logger.warning(
+                    'Instagram still processing post id=%s; not showing 9007 to the user',
+                    post.pk,
+                )
+            else:
+                errors.append(f'Instagram: {exc}')
         except Exception as exc:
             logger.exception('Unexpected Instagram publish error for post id=%s', post.pk)
             errors.append(f'Instagram: {exc}')

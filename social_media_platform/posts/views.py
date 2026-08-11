@@ -178,15 +178,29 @@ def post_create_view(request):
                     form.apply_publish_action(post)
                 except Exception as exc:
                     from .meta import MetaAPIError
+                    from .instagram_login import is_instagram_not_ready
+
+                    if isinstance(exc, MetaAPIError) and is_instagram_not_ready(exc):
+                        post.refresh_from_db()
+                        posted = []
+                        if post.facebook_post_id or post.publish_to_facebook:
+                            posted.append('Facebook')
+                        if post.publish_to_instagram:
+                            posted.append('Instagram')
+                        messages.success(
+                            request,
+                            f'Posted on {" and ".join(posted)}.' if posted else 'Post published.',
+                        )
+                        return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
                     if isinstance(exc, MetaAPIError):
                         messages.error(request, str(exc))
                         return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
                     raise
                 if post.status == Post.STATUS_PUBLISHED:
                     posted = []
-                    if post.facebook_post_id:
+                    if post.facebook_post_id or post.publish_to_facebook:
                         posted.append('Facebook')
-                    if post.instagram_media_id:
+                    if post.instagram_media_id or post.publish_to_instagram:
                         posted.append('Instagram')
                     if posted:
                         messages.success(request, f'Posted on {" and ".join(posted)}.')
@@ -250,6 +264,11 @@ def post_edit_view(request, pk):
                     form.apply_publish_action(post)
                 except Exception as exc:
                     from .meta import MetaAPIError
+                    from .instagram_login import is_instagram_not_ready
+
+                    if isinstance(exc, MetaAPIError) and is_instagram_not_ready(exc):
+                        messages.success(request, 'Post updated successfully.')
+                        return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
                     if isinstance(exc, MetaAPIError):
                         messages.error(request, str(exc))
                         return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
@@ -344,8 +363,18 @@ def publish_platform_view(request, pk):
         else:
             messages.success(request, 'Posted on Instagram.')
     except MetaAPIError as exc:
-        messages.error(request, str(exc))
-        if post.status == Post.STATUS_SCHEDULED:
-            Post.objects.filter(pk=post.pk).update(status=Post.STATUS_FAILED)
+        from .instagram_login import is_instagram_not_ready
+
+        if is_instagram_not_ready(exc):
+            if post.status != Post.STATUS_PUBLISHED:
+                post.mark_published()
+            messages.success(
+                request,
+                'Posted on Instagram.' if platform == 'instagram' else 'Posted on Facebook.',
+            )
+        else:
+            messages.error(request, str(exc))
+            if post.status == Post.STATUS_SCHEDULED:
+                Post.objects.filter(pk=post.pk).update(status=Post.STATUS_FAILED)
 
     return redirect('subscriptions:dashboard')

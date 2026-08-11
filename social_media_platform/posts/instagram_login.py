@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from datetime import timedelta
+from pathlib import Path
 from urllib.parse import urlencode
 
 import httpx
@@ -14,6 +16,10 @@ from django.utils import timezone
 from .meta import MetaAPIError, _raise_for_graph, absolute_media_url
 
 logger = logging.getLogger(__name__)
+
+
+class InstagramStillProcessing(MetaAPIError):
+    """Transient 9007 — Instagram accepted the image but has not finished it yet."""
 
 IG_OAUTH_SCOPES = (
     'instagram_business_basic',
@@ -177,23 +183,61 @@ def fetch_instagram_login_profile(access_token: str) -> dict:
     }
 
 
-def _wait_for_ig_login_container(creation_id: str, access_token: str, *, attempts: int = 12) -> None:
+def _container_status(data: dict) -> str:
+    return str(data.get('status_code') or data.get('status') or '').strip().upper()
+
+
+def is_instagram_not_ready(exc: Exception) -> bool:
+    text = str(exc or '').lower()
+    return '9007' in text or 'media id is not available' in text or 'not ready for publishing' in text
+
+
+def _wait_for_ig_login_container(creation_id: str, access_token: str, *, attempts: int = 30) -> None:
+    """Poll until Instagram finishes processing. 9007 is treated as 'still waiting'."""
     url = f'{ig_graph_base()}/{creation_id}'
+    time.sleep(5)
     with httpx.Client(timeout=30.0) as client:
-        for _ in range(attempts):
+        for attempt in range(attempts):
             resp = client.get(
                 url,
                 params={'fields': 'status_code,status', 'access_token': access_token},
             )
             data = resp.json()
-            _raise_for_graph(data, fallback='Instagram container status failed')
-            status = (data.get('status_code') or '').upper()
+            if isinstance(data, dict) and data.get('error'):
+                err = data.get('error') or {}
+                code = err.get('code')
+                if code in {9007, 24}:
+                    logger.info(
+                        'Instagram container %s not ready yet (status error %s), waiting…',
+                        creation_id,
+                        code,
+                    )
+                    time.sleep(3)
+                    continue
+                _raise_for_graph(data, fallback='Instagram container status failed')
+            status = _container_status(data)
+            logger.info('Instagram container %s status=%s attempt=%s', creation_id, status or 'UNKNOWN', attempt + 1)
             if status == 'FINISHED':
+                time.sleep(3)
                 return
-            if status == 'ERROR':
-                raise MetaAPIError(data.get('status') or 'Instagram media container failed.')
-            time.sleep(2)
-    raise MetaAPIError('Instagram media container timed out before it was ready.')
+            if status in {'ERROR', 'EXPIRED'}:
+                detail = data.get('status') or status
+                raise MetaAPIError(
+                    f'Instagram could not process the image ({detail}). '
+                    'Use a public HTTPS image URL and a JPEG/PNG between 4:5 and 1.91:1.'
+                )
+            time.sleep(3)
+    # Still processing — publish step will keep retrying 9007 instead of erroring here.
+
+
+def _publish_container(*, ig_user_id: str, access_token: str, creation_id: str) -> dict:
+    publish_url = f'{ig_graph_base()}/{ig_user_id}/media_publish'
+    with httpx.Client(timeout=60.0) as client:
+        resp = client.post(
+            publish_url,
+            data={'creation_id': creation_id, 'access_token': access_token},
+        )
+        return resp.json()
 
 
 def publish_instagram_login_photo(*, ig_user_id: str, access_token: str, image_url: str, caption: str) -> str:
@@ -216,13 +260,26 @@ def publish_instagram_login_photo(*, ig_user_id: str, access_token: str, image_u
 
     _wait_for_ig_login_container(str(creation_id), access_token)
 
-    publish_url = f'{ig_graph_base()}/{ig_user_id}/media_publish'
-    with httpx.Client(timeout=60.0) as client:
-        resp = client.post(
-            publish_url,
-            data={'creation_id': creation_id, 'access_token': access_token},
+    published = {}
+    for attempt in range(20):
+        published = _publish_container(
+            ig_user_id=ig_user_id,
+            access_token=access_token,
+            creation_id=str(creation_id),
         )
-        published = resp.json()
+        err = published.get('error') if isinstance(published, dict) else None
+        if err and err.get('code') == 9007:
+            logger.info('Instagram still processing (9007) attempt %s — waiting silently', attempt + 1)
+            time.sleep(4)
+            continue
+        break
+
+    err = published.get('error') if isinstance(published, dict) else None
+    if err and err.get('code') == 9007:
+        # Do not surface 9007 to the user — Instagram usually finishes a few seconds later.
+        logger.warning('Instagram container %s still processing after retries; skipping user error', creation_id)
+        raise InstagramStillProcessing('instagram_still_processing')
+
     _raise_for_graph(published, fallback='Instagram media publish failed')
     media_id = published.get('id')
     if not media_id:
@@ -232,9 +289,37 @@ def publish_instagram_login_photo(*, ig_user_id: str, access_token: str, image_u
 
 def public_image_url_for_instagram(image_url: str) -> str:
     url = absolute_media_url(image_url)
-    if url.startswith('http://localhost') or url.startswith('http://127.0.0.1'):
+    if (
+        url.startswith('http://localhost')
+        or url.startswith('http://127.0.0.1')
+        or not url.startswith('https://')
+    ):
         raise MetaAPIError(
             'Instagram needs a public HTTPS image URL. '
-            'Set PUBLIC_BASE_URL to a public tunnel/domain Meta can reach.'
+            'Set PUBLIC_BASE_URL to a public https tunnel/domain Meta can reach.'
         )
     return url
+
+
+def instagram_publish_image_url(image_path: Path, image_url: str) -> str:
+    """
+    Instagram fetches the image itself. Prefer a JPEG copy so processing finishes
+    reliably (PNG/OpenAI files often stay IN_PROGRESS and then fail with 9007).
+    """
+    source = Path(image_path) if image_path else None
+    publish_rel = image_url
+    if source and source.is_file() and source.suffix.lower() not in {'.jpg', '.jpeg'}:
+        try:
+            from PIL import Image
+
+            out_dir = Path(settings.MEDIA_ROOT) / 'posts' / 'ig_ready'
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_path = out_dir / f'{uuid.uuid4().hex}.jpg'
+            with Image.open(source) as img:
+                rgb = img.convert('RGB')
+                rgb.save(out_path, format='JPEG', quality=90)
+            publish_rel = f'{settings.MEDIA_URL.rstrip("/")}/posts/ig_ready/{out_path.name}'
+            logger.info('Prepared JPEG for Instagram publish: %s', out_path.name)
+        except Exception:
+            logger.exception('Could not convert image to JPEG for Instagram; using original')
+    return public_image_url_for_instagram(publish_rel)

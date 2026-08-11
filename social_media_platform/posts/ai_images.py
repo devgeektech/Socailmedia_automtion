@@ -18,7 +18,7 @@ OPENAI_IMAGES_URL = "https://api.openai.com/v1/images/generations"
 
 # False = Always use OpenAI
 # True = Use static sample images
-USE_STATIC_AI_IMAGES = False
+USE_STATIC_AI_IMAGES = True
 
 # Reject placeholders / corrupt tiny files
 MIN_IMAGE_BYTES = 50_000

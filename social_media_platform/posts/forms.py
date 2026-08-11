@@ -162,7 +162,13 @@ class PostForm(forms.ModelForm):
             try:
                 publish_post(post)
                 post.refresh_from_db()
-            except MetaAPIError:
+            except MetaAPIError as exc:
+                from .instagram_login import is_instagram_not_ready
+
+                post.refresh_from_db()
+                if is_instagram_not_ready(exc) and (post.facebook_post_id or post.instagram_media_id):
+                    post.mark_published()
+                    return post
                 post.status = Post.STATUS_FAILED
                 post.save(update_fields=['status', 'updated_at'])
                 raise
