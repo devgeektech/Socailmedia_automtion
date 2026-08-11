@@ -183,20 +183,15 @@ def post_create_view(request):
                         return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
                     raise
                 if post.status == Post.STATUS_PUBLISHED:
-                    parts = ['Post published successfully.']
-                    if post.publish_to_facebook:
-                        if post.facebook_post_id:
-                            parts.append(
-                                f'Posted to Facebook: https://www.facebook.com/{post.facebook_post_id}'
-                            )
-                        else:
-                            parts.append('Facebook was selected but no post id was returned — check connection.')
-                    if post.publish_to_instagram:
-                        if post.instagram_media_id:
-                            parts.append('Posted to Instagram.')
-                        else:
-                            parts.append('Instagram was selected but publish did not complete.')
-                    messages.success(request, ' '.join(parts))
+                    posted = []
+                    if post.facebook_post_id:
+                        posted.append('Facebook')
+                    if post.instagram_media_id:
+                        posted.append('Instagram')
+                    if posted:
+                        messages.success(request, f'Posted on {" and ".join(posted)}.')
+                    else:
+                        messages.success(request, 'Post published.')
                 else:
                     from django.utils import timezone as dj_tz
 
@@ -345,13 +340,9 @@ def publish_platform_view(request, pk):
         if post.status != Post.STATUS_PUBLISHED:
             post.mark_published()
         if platform == 'facebook':
-            fb_id = result.get('facebook') or post.facebook_post_id
-            msg = 'Published to your Facebook Page.'
-            if fb_id:
-                msg += f' Open: https://www.facebook.com/{fb_id}'
-            messages.success(request, msg)
+            messages.success(request, 'Posted on Facebook.')
         else:
-            messages.success(request, 'Published to Instagram. Check your connected Instagram feed.')
+            messages.success(request, 'Posted on Instagram.')
     except MetaAPIError as exc:
         messages.error(request, str(exc))
         if post.status == Post.STATUS_SCHEDULED:

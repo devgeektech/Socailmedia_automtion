@@ -21,7 +21,12 @@
   {% if messages %}
   <div class="messages-container">
     {% for message in messages %}
-    <div class="glass-card message-toast">{{ message }}</div>
+    <div class="glass-card message-toast" role="status">
+      <p class="message-toast-text">{{ message }}</p>
+      <button type="button" class="message-toast-close" aria-label="Hide notification" title="Hide">
+        <span aria-hidden="true">&times;</span>
+      </button>
+    </div>
     {% endfor %}
   </div>
   {% endif %}
@@ -63,6 +68,14 @@
       {% block admin_content %}{% endblock %}
     </main>
   </div>
+  <script>
+    document.addEventListener('click', function (event) {
+      var closeBtn = event.target.closest('.message-toast-close');
+      if (!closeBtn) return;
+      var toast = closeBtn.closest('.message-toast');
+      if (toast) toast.remove();
+    });
+  </script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>
