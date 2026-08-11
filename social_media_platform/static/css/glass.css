@@ -246,6 +246,42 @@ body {
   box-shadow: 0 12px 28px rgba(13, 148, 136, 0.28);
 }
 
+.btn-primary.is-loading,
+.btn-primary:disabled {
+  cursor: wait;
+  opacity: 0.88;
+  transform: none;
+  pointer-events: none;
+}
+
+.submit-btn-loading {
+  display: none;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.submit-btn-loading[hidden] {
+  display: none !important;
+}
+
+.btn-primary.is-loading .submit-btn-loading {
+  display: inline-flex;
+}
+
+.btn-primary.is-loading .submit-btn-label {
+  display: none;
+}
+
+.btn-primary.is-loading .ai-spinner {
+  border-color: rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+}
+
+.btn-secondary.is-disabled {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
 .btn-secondary {
   display: inline-flex;
   align-items: center;

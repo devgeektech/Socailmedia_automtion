@@ -182,30 +182,16 @@ def post_create_view(request):
 
                     if isinstance(exc, MetaAPIError) and is_instagram_not_ready(exc):
                         post.refresh_from_db()
-                        posted = []
-                        if post.facebook_post_id or post.publish_to_facebook:
-                            posted.append('Facebook')
-                        if post.publish_to_instagram:
-                            posted.append('Instagram')
-                        messages.success(
-                            request,
-                            f'Posted on {" and ".join(posted)}.' if posted else 'Post published.',
-                        )
+                        messages.success(request, 'Post published successfully.')
                         return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
                     if isinstance(exc, MetaAPIError):
-                        messages.error(request, str(exc))
+                        from .meta import friendly_user_error
+
+                        messages.error(request, friendly_user_error(exc))
                         return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
                     raise
                 if post.status == Post.STATUS_PUBLISHED:
-                    posted = []
-                    if post.facebook_post_id or post.publish_to_facebook:
-                        posted.append('Facebook')
-                    if post.instagram_media_id or post.publish_to_instagram:
-                        posted.append('Instagram')
-                    if posted:
-                        messages.success(request, f'Posted on {" and ".join(posted)}.')
-                    else:
-                        messages.success(request, 'Post published.')
+                    messages.success(request, 'Post published successfully.')
                 else:
                     from django.utils import timezone as dj_tz
 
@@ -219,12 +205,10 @@ def post_create_view(request):
                         local_when = dj_tz.localtime(when)
                         messages.success(
                             request,
-                            f'Scheduled for {" & ".join(platforms)} at '
-                            f'{local_when.strftime("%d %b %Y, %I:%M %p")}. '
-                            'It will post automatically — no extra click needed.',
+                            f'Your post is scheduled for {local_when.strftime("%d %b %Y, %I:%M %p")}.',
                         )
                     else:
-                        messages.success(request, 'Post scheduled successfully.')
+                        messages.success(request, 'Your post is scheduled.')
                 return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
     else:
         form = PostForm(user=request.user)
@@ -270,7 +254,9 @@ def post_edit_view(request, pk):
                         messages.success(request, 'Post updated successfully.')
                         return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
                     if isinstance(exc, MetaAPIError):
-                        messages.error(request, str(exc))
+                        from .meta import friendly_user_error
+
+                        messages.error(request, friendly_user_error(exc))
                         return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
                     raise
                 messages.success(request, 'Post updated successfully.')
@@ -341,39 +327,32 @@ def publish_platform_view(request, pk):
         return redirect('subscriptions:dashboard')
 
     if platform == 'facebook' and not meta_configured():
-        messages.error(
-            request,
-            'Facebook Login is not configured. Ask the admin to set META_APP_ID and META_APP_SECRET.',
-        )
+        messages.error(request, 'Facebook is not available right now. Please try again later.')
         return redirect('subscriptions:dashboard')
 
     if platform == 'facebook' and not facebook_publish_ready(request.user):
-        messages.error(request, 'Connect Facebook from Social Connections first.')
+        messages.error(request, 'Connect Facebook first, then try again.')
         return redirect('accounts:social_connections')
     if platform == 'instagram' and not instagram_publish_ready(request.user):
-        messages.error(request, 'Connect Instagram from Social Connections first.')
+        messages.error(request, 'Connect Instagram first, then try again.')
         return redirect('accounts:social_connections')
 
     try:
         result = publish_post_to_meta(post, platforms={platform})
         if post.status != Post.STATUS_PUBLISHED:
             post.mark_published()
-        if platform == 'facebook':
-            messages.success(request, 'Posted on Facebook.')
-        else:
-            messages.success(request, 'Posted on Instagram.')
+        messages.success(request, 'Post published successfully.')
     except MetaAPIError as exc:
         from .instagram_login import is_instagram_not_ready
 
         if is_instagram_not_ready(exc):
             if post.status != Post.STATUS_PUBLISHED:
                 post.mark_published()
-            messages.success(
-                request,
-                'Posted on Instagram.' if platform == 'instagram' else 'Posted on Facebook.',
-            )
+            messages.success(request, 'Post published successfully.')
         else:
-            messages.error(request, str(exc))
+            from .meta import friendly_user_error
+
+            messages.error(request, friendly_user_error(exc))
             if post.status == Post.STATUS_SCHEDULED:
                 Post.objects.filter(pk=post.pk).update(status=Post.STATUS_FAILED)
 

@@ -166,14 +166,10 @@ def _success_messages(request, profile: UserProfile, *, purpose: str):
         ig_label = profile.instagram_username or 'Instagram'
         messages.success(
             request,
-            f'Connected Facebook Page “{page_name}” and Instagram (@{ig_label}).',
+            f'Connected Facebook ({page_name}) and Instagram (@{ig_label}).',
         )
     else:
-        messages.success(
-            request,
-            f'Connected Facebook Page “{page_name}”. '
-            'Use Connect Instagram next if you also want to publish there.',
-        )
+        messages.success(request, f'Connected Facebook ({page_name}).')
 
 
 @login_required
@@ -230,7 +226,7 @@ def meta_connect_view(request):
     if not meta_configured():
         messages.error(
             request,
-            'Facebook Login is not configured yet. Ask the site admin to set META_APP_ID and META_APP_SECRET.',
+            'Facebook is not available right now. Please try again later.',
         )
         return _meta_return_redirect(request)
 
@@ -250,10 +246,7 @@ def meta_connect_view(request):
                 'instagram_username',
             ])
             label = profile.instagram_username or 'Instagram'
-            messages.success(
-                request,
-                f'Connected Instagram (@{label}) to Page “{profile.facebook_page_name or "your Page"}”.',
-            )
+            messages.success(request, f'Connected Instagram (@{label}).')
             return _meta_return_redirect(request)
 
         # Try other Pages via stored user token before full OAuth
@@ -269,17 +262,13 @@ def meta_connect_view(request):
                         fb_user_id=profile.facebook_user_id,
                         user_token=profile.facebook_user_access_token,
                     )
-            except MetaAPIError as exc:
-                messages.warning(request, f'{exc} Asking Facebook for Instagram permissions…')
+            except MetaAPIError:
+                messages.warning(request, 'Please approve Instagram access on the next screen.')
             except Exception:
                 logger.exception('Instagram reconnect via stored user token failed')
 
         # Full OAuth with rerequest so IG permissions are granted
-        messages.info(
-            request,
-            'Could not find Instagram on your connected Page yet. '
-            'Approve all Instagram permissions on the next Facebook screen.',
-        )
+        messages.info(request, 'Please approve Instagram access on the next screen.')
 
     redirect_uri = _oauth_redirect_uri(request)
     state = get_random_string(32)
@@ -292,8 +281,8 @@ def meta_connect_view(request):
             state=state,
             rerequest=(purpose == 'instagram'),
         )
-    except MetaAPIError as exc:
-        messages.error(request, str(exc))
+    except MetaAPIError:
+        messages.error(request, 'Could not connect Facebook. Please try again.')
         return _meta_return_redirect(request)
     return redirect(url)
 
@@ -313,18 +302,18 @@ def meta_callback_view(request):
 
     error = request.GET.get('error_description') or request.GET.get('error')
     if error:
-        messages.error(request, f'Meta connection cancelled: {error}')
+        messages.error(request, 'Facebook connection was cancelled. Please try again.')
         return _meta_return_redirect(request)
 
     state = request.GET.get('state')
     expected = request.session.pop('meta_oauth_state', None)
     if not state or not expected or state != expected:
-        messages.error(request, 'Invalid Meta OAuth state. Please try connecting again.')
+        messages.error(request, 'Could not connect Facebook. Please try again.')
         return _meta_return_redirect(request)
 
     code = request.GET.get('code')
     if not code:
-        messages.error(request, 'Meta did not return an authorization code.')
+        messages.error(request, 'Could not connect Facebook. Please try again.')
         return _meta_return_redirect(request)
 
     # Must use the same redirect_uri that started OAuth (stored in session)
@@ -342,12 +331,12 @@ def meta_callback_view(request):
             fb_user_id=fb_user_id,
             user_token=long_token,
         )
-    except MetaAPIError as exc:
-        messages.error(request, str(exc))
+    except MetaAPIError:
+        messages.error(request, 'Could not connect Facebook. Please try again.')
         return _meta_return_redirect(request)
     except Exception:
         logger.exception('Meta OAuth callback failed')
-        messages.error(request, 'Could not complete Meta connection. Please try again.')
+        messages.error(request, 'Could not connect Facebook. Please try again.')
         return _meta_return_redirect(request)
 
 
@@ -358,7 +347,7 @@ def meta_select_page_view(request):
     pages = request.session.get('meta_pending_pages') or []
     purpose = request.session.get('meta_oauth_purpose') or 'facebook'
     if not pages:
-        messages.error(request, 'No Pages pending. Start Connect Facebook or Connect Instagram again.')
+        messages.error(request, 'Please connect Facebook again.')
         return _meta_return_redirect(request)
 
     if request.method == 'POST':
@@ -370,10 +359,7 @@ def meta_select_page_view(request):
             messages.error(request, 'Choose a valid Facebook Page.')
             return redirect('accounts:meta_select_page')
         if purpose == 'instagram' and not page.get('instagram_id'):
-            messages.error(
-                request,
-                'That Page has no linked Instagram. Pick a Page with Instagram, or link IG in Meta Business Suite.',
-            )
+            messages.error(request, 'Please choose a Facebook Page that has Instagram connected.')
             return redirect('accounts:meta_select_page')
 
         profile = _ensure_profile(request.user)
@@ -405,8 +391,7 @@ def instagram_connect_view(request):
     if not instagram_login_configured():
         messages.error(
             request,
-            'Instagram Login is not configured yet. Ask the site admin to set '
-            'INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET.',
+            'Instagram is not available right now. Please try again later.',
         )
         return _meta_return_redirect(request)
 
@@ -416,8 +401,8 @@ def instagram_connect_view(request):
     request.session['ig_oauth_redirect_uri'] = redirect_uri
     try:
         url = instagram_oauth_authorize_url(redirect_uri=redirect_uri, state=state)
-    except MetaAPIError as exc:
-        messages.error(request, str(exc))
+    except MetaAPIError:
+        messages.error(request, 'Could not connect Instagram. Please try again.')
         return _meta_return_redirect(request)
     return redirect(url)
 
@@ -434,18 +419,18 @@ def instagram_callback_view(request):
 
     error = request.GET.get('error_description') or request.GET.get('error')
     if error:
-        messages.error(request, f'Instagram connection cancelled: {error}')
+        messages.error(request, 'Instagram connection was cancelled. Please try again.')
         return _meta_return_redirect(request)
 
     state = request.GET.get('state')
     expected = request.session.pop('ig_oauth_state', None)
     if not state or not expected or state != expected:
-        messages.error(request, 'Invalid Instagram OAuth state. Please try connecting again.')
+        messages.error(request, 'Could not connect Instagram. Please try again.')
         return _meta_return_redirect(request)
 
     code = request.GET.get('code')
     if not code:
-        messages.error(request, 'Instagram did not return an authorization code.')
+        messages.error(request, 'Could not connect Instagram. Please try again.')
         return _meta_return_redirect(request)
 
     redirect_uri = request.session.pop('ig_oauth_redirect_uri', None) or _instagram_oauth_redirect_uri(request)
@@ -464,14 +449,14 @@ def instagram_callback_view(request):
             expires_at=expires_at,
         )
         label = username or 'Instagram'
-        messages.success(request, f'Connected Instagram (@{label}) with Instagram Login.')
+        messages.success(request, f'Connected Instagram (@{label}).')
         return _meta_return_redirect(request)
-    except MetaAPIError as exc:
-        messages.error(request, str(exc))
+    except MetaAPIError:
+        messages.error(request, 'Could not connect Instagram. Please try again.')
         return _meta_return_redirect(request)
     except Exception:
         logger.exception('Instagram Login callback failed')
-        messages.error(request, 'Could not complete Instagram connection. Please try again.')
+        messages.error(request, 'Could not connect Instagram. Please try again.')
         return _meta_return_redirect(request)
 
 

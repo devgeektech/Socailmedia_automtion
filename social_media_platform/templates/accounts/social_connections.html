@@ -10,7 +10,7 @@
         <span class="logo-text">SocialFlow</span>
       </a>
       <h1 class="dashboard-title">Social Connections</h1>
-      <p class="platform-note" style="margin:0.35rem 0 0;">Connect Facebook and Instagram accounts</p>
+      <p class="platform-note" style="margin:0.35rem 0 0;">Connect your accounts to publish posts.</p>
     </div>
     <div class="dashboard-actions">
       {% if return_next %}
@@ -26,11 +26,11 @@
     <div class="social-row-copy">
       <h2>Facebook</h2>
       {% if facebook_ready %}
-      <p>Connected to Page <strong>{{ profile.facebook_page_name|default:"your Page" }}</strong>. Posts publish to this Page (not your personal profile).</p>
+      <p>Connected to <strong>{{ profile.facebook_page_name|default:"your Facebook Page" }}</strong>.</p>
       {% elif not meta_app_configured %}
-      <p>Facebook Login is not configured on this site yet. Ask the admin to set Meta App ID and Secret.</p>
+      <p>Facebook is not available right now. Please try again later.</p>
       {% else %}
-      <p>Not connected. Connect a Facebook Page you manage.</p>
+      <p>Not connected yet.</p>
       {% endif %}
     </div>
     <div class="social-row-actions">
@@ -52,11 +52,11 @@
     <div class="social-row-copy">
       <h2>Instagram</h2>
       {% if instagram_ready %}
-      <p>Connected{% if profile.instagram_username %} as <strong>@{{ profile.instagram_username }}</strong>{% endif %} with Instagram Login.</p>
+      <p>Connected{% if profile.instagram_username %} as <strong>@{{ profile.instagram_username }}</strong>{% endif %}.</p>
       {% elif not instagram_app_configured %}
-      <p>Instagram Login is not configured yet. Ask the admin to set Instagram App ID and Secret.</p>
+      <p>Instagram is not available right now. Please try again later.</p>
       {% else %}
-      <p>Not connected. Use Instagram Login with a Business or Creator account.</p>
+      <p>Not connected yet.</p>
       {% endif %}
     </div>
     <div class="social-row-actions">
@@ -73,17 +73,5 @@
     </div>
   </div>
 
-  <div class="glass-card" style="margin-top:1rem;">
-    <p class="platform-note" style="margin:0 0 0.65rem;">
-      Facebook OAuth redirect:
-      <code>{{ oauth_redirect_uri }}</code>
-    </p>
-    <p class="platform-note" style="margin:0;">
-      Instagram OAuth redirect:
-      <code>{{ instagram_oauth_redirect_uri }}</code>
-      — add this under Instagram → API setup with Instagram Login → Valid OAuth Redirect URIs.
-      Use the same host you browse on (<code>localhost</code> vs <code>127.0.0.1</code>).
-    </p>
-  </div>
 </div>
 {% endblock %}

@@ -27,6 +27,29 @@ class MetaAPIError(Exception):
     """Raised when a Meta Graph API call fails."""
 
 
+def friendly_user_error(exc: Exception) -> str:
+    """Map technical publish/connect errors to short user-facing copy."""
+    text = str(exc or '').strip()
+    lower = text.lower()
+    if not text:
+        return 'Something went wrong. Please try again.'
+    if '9007' in lower or 'media id is not available' in lower or 'not ready' in lower:
+        return 'Your post is being published. It should appear shortly.'
+    if 'public_base_url' in lower or ('https' in lower and 'image' in lower):
+        return 'We could not publish this image right now. Please try again in a moment.'
+    if 'not configured' in lower or 'app id' in lower or 'app secret' in lower:
+        return 'This connection is not available right now. Please try again later.'
+    if 'oauth' in lower or 'authorization' in lower or 'access token' in lower:
+        return 'Please reconnect your account and try again.'
+    if 'connect facebook' in lower:
+        return 'Connect Facebook first, then try again.'
+    if 'connect instagram' in lower:
+        return 'Connect Instagram first, then try again.'
+    if any(token in lower for token in ('code ', 'graph', 'uri', 'token', 'meta ', 'oauth')):
+        return 'Something went wrong while publishing. Please try again.'
+    return text
+
+
 def meta_configured() -> bool:
     """True if Meta OAuth App ID and Secret are set (platform config)."""
     return bool(settings.META_APP_ID and settings.META_APP_SECRET)

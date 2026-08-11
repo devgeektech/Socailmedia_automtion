@@ -144,8 +144,12 @@
       </fieldset>
 
       <div class="form-actions">
-        <button type="submit" class="btn-primary" style="width:auto;">
-          {% if is_edit %}Save changes{% else %}Create post{% endif %}
+        <button type="submit" class="btn-primary" id="btn-submit-post" style="width:auto;">
+          <span class="submit-btn-label" id="submit-btn-label">{% if is_edit %}Save changes{% else %}Create post{% endif %}</span>
+          <span class="submit-btn-loading" id="submit-btn-loading" hidden>
+            <span class="ai-spinner" aria-hidden="true"></span>
+            {% if is_edit %}Saving…{% else %}Publishing…{% endif %}
+          </span>
         </button>
         <a href="{% url 'subscriptions:dashboard' %}" class="btn-secondary js-clear-draft" id="btn-cancel-post">Cancel</a>
       </div>
@@ -200,6 +204,10 @@
   var generateBtn = document.getElementById('btn-generate-image');
   var genBtnLabel = document.getElementById('gen-btn-label');
   var genBtnLoading = document.getElementById('gen-btn-loading');
+  var submitBtn = document.getElementById('btn-submit-post');
+  var submitBtnLabel = document.getElementById('submit-btn-label');
+  var submitBtnLoading = document.getElementById('submit-btn-loading');
+  var cancelBtn = document.getElementById('btn-cancel-post');
   var aiStatus = document.getElementById('ai-status');
   var regenerate = document.getElementById('id_regenerate_image');
   var picker = document.getElementById('ai-image-picker');
@@ -323,6 +331,17 @@
     if (genBtnLabel) genBtnLabel.hidden = !!isLoading;
     if (genBtnLoading) genBtnLoading.hidden = !isLoading;
     if (generateBtn) generateBtn.classList.toggle('is-loading', !!isLoading);
+  }
+
+  function setPublishing(isLoading) {
+    if (submitBtn) {
+      submitBtn.disabled = !!isLoading;
+      submitBtn.classList.toggle('is-loading', !!isLoading);
+    }
+    if (submitBtnLabel) submitBtnLabel.hidden = !!isLoading;
+    if (submitBtnLoading) submitBtnLoading.hidden = !isLoading;
+    if (cancelBtn) cancelBtn.classList.toggle('is-disabled', !!isLoading);
+    if (generateBtn) generateBtn.disabled = !!isLoading;
   }
 
   function parseJsonResponse(res) {
@@ -505,6 +524,12 @@
         var clientErr = document.querySelector('.js-client-schedule-error');
         if (clientErr) clientErr.remove();
       }
+
+      if (submitBtn && submitBtn.disabled) {
+        event.preventDefault();
+        return;
+      }
+      setPublishing(true);
     });
   }
 
