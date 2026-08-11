@@ -83,7 +83,6 @@ def instagram_oauth_authorize_url(*, redirect_uri: str, state: str) -> str:
         'response_type': 'code',
         'scope': ','.join(IG_OAUTH_SCOPES),
         'state': state,
-        'force_reauth': 'true',
     }
     return f'https://www.instagram.com/oauth/authorize?{urlencode(params)}'
 
