@@ -326,7 +326,7 @@ def publish_platform_view(request, pk):
         messages.error(request, 'This post needs an image before it can be published socially.')
         return redirect('subscriptions:dashboard')
 
-    if not meta_configured():
+    if platform == 'facebook' and not meta_configured():
         messages.error(
             request,
             'Facebook Login is not configured. Ask the admin to set META_APP_ID and META_APP_SECRET.',

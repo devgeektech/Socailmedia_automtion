@@ -210,10 +210,14 @@ USE_STATIC_AI_IMAGES = os.getenv('USE_STATIC_AI_IMAGES', 'False').strip().lower(
     '1', 'true', 'yes', 'on',
 }
 
-# Meta (Facebook / Instagram) Graph API
+# Meta (Facebook Page OAuth + publish)
 META_APP_ID = (os.getenv('META_APP_ID') or '').strip()
 META_APP_SECRET = (os.getenv('META_APP_SECRET') or '').strip()
 META_GRAPH_VERSION = (os.getenv('META_GRAPH_VERSION') or 'v21.0').strip()
+# Instagram API with Instagram Login (separate from Facebook)
+INSTAGRAM_APP_ID = (os.getenv('INSTAGRAM_APP_ID') or '').strip()
+INSTAGRAM_APP_SECRET = (os.getenv('INSTAGRAM_APP_SECRET') or '').strip()
+INSTAGRAM_GRAPH_VERSION = (os.getenv('INSTAGRAM_GRAPH_VERSION') or META_GRAPH_VERSION or 'v21.0').strip()
 # Public HTTPS origin for Instagram image_url (e.g. Cloudflare tunnel)
 PUBLIC_BASE_URL = (os.getenv('PUBLIC_BASE_URL') or '').strip().rstrip('/')
 # Direct Graph API credentials (testing / shared Page token — skips OAuth)

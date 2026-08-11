@@ -10,7 +10,7 @@
         <span class="logo-text">SocialFlow</span>
       </a>
       <h1 class="dashboard-title">Social Connections</h1>
-      <p class="platform-note" style="margin:0.35rem 0 0;">Connect your own Facebook Page and Instagram to publish posts.</p>
+      <p class="platform-note" style="margin:0.35rem 0 0;">Connect Facebook and Instagram separately. Instagram uses Instagram Login — no Facebook account needed.</p>
     </div>
     <div class="dashboard-actions">
       {% if return_next %}
@@ -21,18 +21,14 @@
     </div>
   </div>
 
-  {% if not meta_app_configured %}
-  <div class="glass-card">
-    <p>Facebook Login is not configured on this site yet. Ask the admin to set Meta App ID and Secret.</p>
-  </div>
-  {% else %}
-
   <div class="glass-card social-row">
     <div class="social-row-icon platform-card-icon platform-card-icon-fb" aria-hidden="true">f</div>
     <div class="social-row-copy">
       <h2>Facebook</h2>
       {% if facebook_ready %}
       <p>Connected to Page <strong>{{ profile.facebook_page_name|default:"your Page" }}</strong>. Posts publish to this Page (not your personal profile).</p>
+      {% elif not meta_app_configured %}
+      <p>Facebook Login is not configured on this site yet. Ask the admin to set Meta App ID and Secret.</p>
       {% else %}
       <p>Not connected. Connect a Facebook Page you manage.</p>
       {% endif %}
@@ -45,7 +41,7 @@
         <input type="hidden" name="target" value="all">
         <button type="submit" class="btn-secondary">Disconnect</button>
       </form>
-      {% else %}
+      {% elif meta_app_configured %}
       <a href="{% url 'accounts:meta_connect' %}?for=facebook{{ next_query }}" class="btn-primary">Connect Facebook</a>
       {% endif %}
     </div>
@@ -56,37 +52,38 @@
     <div class="social-row-copy">
       <h2>Instagram</h2>
       {% if instagram_ready %}
-      <p>Connected{% if profile.instagram_username %} as <strong>@{{ profile.instagram_username }}</strong>{% endif %} (linked to your Facebook Page).</p>
-      {% elif facebook_ready %}
-      <p>Facebook is connected, but Instagram is not. Link an Instagram Business/Creator account to your Page, then connect here.</p>
+      <p>Connected{% if profile.instagram_username %} as <strong>@{{ profile.instagram_username }}</strong>{% endif %} with Instagram Login. No Facebook account required.</p>
+      {% elif not instagram_app_configured %}
+      <p>Instagram Login is not configured yet. Ask the admin to set Instagram App ID and Secret.</p>
       {% else %}
-      <p>Connect Facebook first, then connect Instagram (must be linked to that Page in Meta).</p>
+      <p>Not connected. Use Instagram Login with a Business or Creator account. Facebook is not required.</p>
       {% endif %}
     </div>
     <div class="social-row-actions">
       {% if instagram_ready %}
-      <a href="{% url 'accounts:meta_connect' %}?for=instagram{{ next_query }}" class="btn-secondary">Reconnect</a>
+      <a href="{% url 'accounts:instagram_connect' %}{{ ig_next_query }}" class="btn-secondary">Reconnect</a>
       <form method="post" action="{% url 'accounts:meta_disconnect' %}">
         {% csrf_token %}
         <input type="hidden" name="target" value="instagram">
         <button type="submit" class="btn-secondary">Disconnect</button>
       </form>
-      {% elif facebook_ready %}
-      <a href="{% url 'accounts:meta_connect' %}?for=instagram{{ next_query }}" class="btn-primary">Connect Instagram</a>
-      {% else %}
-      <a href="{% url 'accounts:meta_connect' %}?for=facebook{{ next_query }}" class="btn-secondary">Connect Facebook first</a>
+      {% elif instagram_app_configured %}
+      <a href="{% url 'accounts:instagram_connect' %}{{ ig_next_query }}" class="btn-primary">Connect Instagram</a>
       {% endif %}
     </div>
   </div>
 
   <div class="glass-card" style="margin-top:1rem;">
-    <p class="platform-note" style="margin:0;">
-      OAuth redirect for this browser:
+    <p class="platform-note" style="margin:0 0 0.65rem;">
+      Facebook OAuth redirect:
       <code>{{ oauth_redirect_uri }}</code>
-      — add this exact URL under Valid OAuth Redirect URIs in your Meta app.
+    </p>
+    <p class="platform-note" style="margin:0;">
+      Instagram OAuth redirect:
+      <code>{{ instagram_oauth_redirect_uri }}</code>
+      — add this under Instagram → API setup with Instagram Login → Valid OAuth Redirect URIs.
       Use the same host you browse on (<code>localhost</code> vs <code>127.0.0.1</code>).
     </p>
   </div>
-  {% endif %}
 </div>
 {% endblock %}

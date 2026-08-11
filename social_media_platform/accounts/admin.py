@@ -14,9 +14,15 @@ class UserProfileInline(admin.StackedInline):
         'facebook_page_name',
         'instagram_business_account_id',
         'instagram_username',
+        'instagram_user_id',
+        'instagram_connected_at',
         'meta_connected_at',
     )
-    exclude = ('facebook_page_access_token', 'facebook_user_access_token')
+    exclude = (
+        'facebook_page_access_token',
+        'facebook_user_access_token',
+        'instagram_access_token',
+    )
 
 
 class UserAdmin(BaseUserAdmin):

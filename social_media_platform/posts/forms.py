@@ -108,6 +108,8 @@ class PostForm(forms.ModelForm):
             self.fields['publish_to_instagram'].help_text = (
                 'Connect Instagram from Social Connections first.'
             )
+        elif not instance:
+            self.fields['publish_to_instagram'].initial = True
 
     def clean(self):
         cleaned = super().clean()

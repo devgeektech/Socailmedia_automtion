@@ -43,20 +43,26 @@
       {% elif facebook_ready %}
       <p>
         Facebook Page <strong>{{ profile.facebook_page_name|default:"connected" }}</strong> is ready.
-        Connect Instagram to publish there too.
+        Connect Instagram separately if you also want to publish there.
       </p>
-      {% elif not meta_app_configured %}
-      <p>Social publishing is not configured on this site yet.</p>
+      {% elif instagram_ready %}
+      <p>
+        Instagram{% if profile.instagram_username %} <strong>@{{ profile.instagram_username }}</strong>{% endif %} is ready.
+        Connect Facebook separately if you also want to publish there.
+      </p>
       {% else %}
-      <p>Connect your Facebook Page and Instagram to publish posts from SocialFlow.</p>
+      <p>Connect Facebook and Instagram separately. Instagram does not need a Facebook account.</p>
       {% endif %}
     </div>
     <div class="meta-connect-actions">
       <a href="{% url 'accounts:social_connections' %}" class="btn-primary">Manage connections</a>
       {% if facebook_ready and not instagram_ready %}
-      <a href="{% url 'accounts:meta_connect' %}?for=instagram" class="btn-secondary">Connect Instagram</a>
-      {% elif not facebook_ready and meta_app_configured %}
+      <a href="{% url 'accounts:instagram_connect' %}" class="btn-secondary">Connect Instagram</a>
+      {% elif instagram_ready and not facebook_ready %}
       <a href="{% url 'accounts:meta_connect' %}?for=facebook" class="btn-secondary">Connect Facebook</a>
+      {% elif not facebook_ready and not instagram_ready %}
+      <a href="{% url 'accounts:meta_connect' %}?for=facebook" class="btn-secondary">Connect Facebook</a>
+      <a href="{% url 'accounts:instagram_connect' %}" class="btn-secondary">Connect Instagram</a>
       {% endif %}
     </div>
   </div>

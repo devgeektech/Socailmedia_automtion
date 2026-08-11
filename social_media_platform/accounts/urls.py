@@ -38,4 +38,6 @@ urlpatterns = [
     path('meta/callback/', views.meta_callback_view, name='meta_callback'),
     path('meta/select-page/', views.meta_select_page_view, name='meta_select_page'),
     path('meta/disconnect/', views.meta_disconnect_view, name='meta_disconnect'),
+    path('instagram/connect/', views.instagram_connect_view, name='instagram_connect'),
+    path('instagram/callback/', views.instagram_callback_view, name='instagram_callback'),
 ]

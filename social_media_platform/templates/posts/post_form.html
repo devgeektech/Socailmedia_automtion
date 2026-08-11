@@ -79,14 +79,20 @@
         <legend class="form-label">Publish to</legend>
         {% if not facebook_ready and not instagram_ready %}
         <p class="platform-note">
-          <a href="{% url 'accounts:social_connections' %}?next={% if is_edit %}{% url 'posts:edit' post.pk %}{% else %}{% url 'posts:create' %}{% endif %}" class="js-save-draft-before-leave">Connect Facebook &amp; Instagram</a>
+          <a href="{% url 'accounts:social_connections' %}?next={% if is_edit %}{% url 'posts:edit' post.pk %}{% else %}{% url 'posts:create' %}{% endif %}" class="js-save-draft-before-leave">Connect Facebook or Instagram</a>
           first, then choose where to publish. Your draft is saved while you connect.
         </p>
         {% elif facebook_ready and not instagram_ready %}
         <p class="platform-note">
           Facebook is ready.
-          <a href="{% url 'accounts:meta_connect' %}?for=instagram&next={% if is_edit %}{% url 'posts:edit' post.pk %}{% else %}{% url 'posts:create' %}{% endif %}" class="js-save-draft-before-leave">Connect Instagram</a>
-          to publish there too. Your draft is kept when you return.
+          <a href="{% url 'accounts:instagram_connect' %}?next={% if is_edit %}{% url 'posts:edit' post.pk %}{% else %}{% url 'posts:create' %}{% endif %}" class="js-save-draft-before-leave">Connect Instagram</a>
+          separately if you also want to publish there. Your draft is kept when you return.
+        </p>
+        {% elif instagram_ready and not facebook_ready %}
+        <p class="platform-note">
+          Instagram is ready.
+          <a href="{% url 'accounts:meta_connect' %}?for=facebook&next={% if is_edit %}{% url 'posts:edit' post.pk %}{% else %}{% url 'posts:create' %}{% endif %}" class="js-save-draft-before-leave">Connect Facebook</a>
+          separately if you also want to publish there. Your draft is kept when you return.
         </p>
         {% else %}
         <p class="platform-note">
@@ -124,7 +130,7 @@
             </span>
           </label>
           {% else %}
-          <a href="{% url 'accounts:meta_connect' %}?for={% if facebook_ready %}instagram{% else %}facebook{% endif %}&next={% if is_edit %}{% url 'posts:edit' post.pk %}{% else %}{% url 'posts:create' %}{% endif %}" class="platform-card is-disabled js-save-draft-before-leave" style="text-decoration:none;color:inherit;">
+          <a href="{% url 'accounts:instagram_connect' %}?next={% if is_edit %}{% url 'posts:edit' post.pk %}{% else %}{% url 'posts:create' %}{% endif %}" class="platform-card is-disabled js-save-draft-before-leave" style="text-decoration:none;color:inherit;">
             <span class="platform-card-icon platform-card-icon-ig" aria-hidden="true">ig</span>
             <span class="platform-card-copy">
               <strong>Instagram</strong>

@@ -101,6 +101,10 @@ def _oauth_redirect_uri(request) -> str:
     return request.build_absolute_uri(reverse('accounts:meta_callback'))
 
 
+def _instagram_oauth_redirect_uri(request) -> str:
+    return request.build_absolute_uri(reverse('accounts:instagram_callback'))
+
+
 def _store_meta_next(request) -> None:
     """Remember where to return after Meta connect (e.g. create post form)."""
     if 'next' not in request.GET:
@@ -175,6 +179,7 @@ def _success_messages(request, profile: UserProfile, *, purpose: str):
 @login_required
 def social_connections_view(request):
     """User-facing Facebook / Instagram connection status."""
+    from posts.instagram_login import instagram_login_configured
     from posts.meta import meta_configured
 
     if 'next' in request.GET:
@@ -183,15 +188,19 @@ def social_connections_view(request):
         request.session.pop('meta_oauth_next', None)
     nxt = request.session.get('meta_oauth_next') or ''
     next_q = f'&next={nxt}' if nxt else ''
+    ig_next_query = f'?next={nxt}' if nxt else ''
 
     profile = _ensure_profile(request.user)
     return render(request, 'accounts/social_connections.html', {
         'profile': profile,
         'meta_app_configured': meta_configured(),
+        'instagram_app_configured': instagram_login_configured(),
         'facebook_ready': profile.facebook_ready,
         'instagram_ready': profile.instagram_ready,
         'oauth_redirect_uri': _oauth_redirect_uri(request),
+        'instagram_oauth_redirect_uri': _instagram_oauth_redirect_uri(request),
         'next_query': next_q,
+        'ig_next_query': ig_next_query,
         'return_next': nxt,
     })
 
@@ -213,6 +222,10 @@ def meta_connect_view(request):
         purpose = 'facebook'
 
     _store_meta_next(request)
+
+    # Instagram uses its own Login flow — do not start Facebook OAuth.
+    if purpose == 'instagram':
+        return redirect('accounts:instagram_connect')
 
     if not meta_configured():
         messages.error(
@@ -382,6 +395,87 @@ def meta_select_page_view(request):
 
 
 @login_required
+def instagram_connect_view(request):
+    """Start Instagram Login OAuth (no Facebook Page)."""
+    from posts.instagram_login import instagram_login_configured, instagram_oauth_authorize_url
+    from posts.meta import MetaAPIError
+
+    _store_meta_next(request)
+
+    if not instagram_login_configured():
+        messages.error(
+            request,
+            'Instagram Login is not configured yet. Ask the site admin to set '
+            'INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET.',
+        )
+        return _meta_return_redirect(request)
+
+    redirect_uri = _instagram_oauth_redirect_uri(request)
+    state = get_random_string(32)
+    request.session['ig_oauth_state'] = state
+    request.session['ig_oauth_redirect_uri'] = redirect_uri
+    try:
+        url = instagram_oauth_authorize_url(redirect_uri=redirect_uri, state=state)
+    except MetaAPIError as exc:
+        messages.error(request, str(exc))
+        return _meta_return_redirect(request)
+    return redirect(url)
+
+
+@login_required
+def instagram_callback_view(request):
+    """Instagram Login OAuth redirect."""
+    from posts.instagram_login import (
+        exchange_instagram_code,
+        exchange_long_lived_instagram_token,
+        fetch_instagram_login_profile,
+    )
+    from posts.meta import MetaAPIError
+
+    error = request.GET.get('error_description') or request.GET.get('error')
+    if error:
+        messages.error(request, f'Instagram connection cancelled: {error}')
+        return _meta_return_redirect(request)
+
+    state = request.GET.get('state')
+    expected = request.session.pop('ig_oauth_state', None)
+    if not state or not expected or state != expected:
+        messages.error(request, 'Invalid Instagram OAuth state. Please try connecting again.')
+        return _meta_return_redirect(request)
+
+    code = request.GET.get('code')
+    if not code:
+        messages.error(request, 'Instagram did not return an authorization code.')
+        return _meta_return_redirect(request)
+
+    redirect_uri = request.session.pop('ig_oauth_redirect_uri', None) or _instagram_oauth_redirect_uri(request)
+
+    try:
+        short_token, user_id = exchange_instagram_code(code=code, redirect_uri=redirect_uri)
+        long_token, expires_at = exchange_long_lived_instagram_token(short_token)
+        profile_data = fetch_instagram_login_profile(long_token)
+        ig_user_id = profile_data.get('user_id') or user_id
+        username = profile_data.get('username') or ''
+        profile = _ensure_profile(request.user)
+        profile.apply_instagram_login(
+            user_id=ig_user_id,
+            access_token=long_token,
+            username=username,
+            expires_at=expires_at,
+        )
+        label = username or 'Instagram'
+        messages.success(request, f'Connected Instagram (@{label}) with Instagram Login.')
+        return _meta_return_redirect(request)
+    except MetaAPIError as exc:
+        messages.error(request, str(exc))
+        return _meta_return_redirect(request)
+    except Exception:
+        logger.exception('Instagram Login callback failed')
+        messages.error(request, 'Could not complete Instagram connection. Please try again.')
+        return _meta_return_redirect(request)
+
+
+@login_required
 @require_POST
 def meta_disconnect_view(request):
     profile = _ensure_profile(request.user)
@@ -391,5 +485,5 @@ def meta_disconnect_view(request):
         messages.success(request, 'Instagram disconnected.')
     else:
         profile.clear_meta_connection()
-        messages.success(request, 'Facebook and Instagram disconnected.')
+        messages.success(request, 'Facebook disconnected.')
     return redirect('accounts:social_connections')

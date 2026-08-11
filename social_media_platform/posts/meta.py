@@ -77,11 +77,9 @@ def facebook_publish_ready(user) -> bool:
 
 
 def instagram_publish_ready(user) -> bool:
-    try:
-        creds = resolve_publish_credentials(user)
-    except MetaAPIError:
-        return False
-    return bool(creds.get('page_token') and creds.get('ig_user_id'))
+    from .instagram_login import instagram_login_ready
+
+    return instagram_login_ready(user)
 
 
 def graph_base() -> str:
@@ -408,8 +406,6 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
     if not want_fb and not want_ig:
         return {'facebook': None, 'instagram': None}
 
-    creds = resolve_publish_credentials(post.user)
-
     if not post.image:
         raise MetaAPIError('An image is required to publish to Facebook or Instagram.')
 
@@ -421,6 +417,7 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
 
     if want_fb:
         try:
+            creds = resolve_publish_credentials(post.user)
             fb_id = publish_facebook_photo(
                 page_id=creds['page_id'],
                 page_token=creds['page_token'],
@@ -449,46 +446,41 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
             errors.append(f'Facebook: {exc}')
 
     if want_ig:
-        ig_user_id = creds.get('ig_user_id') or ''
-        if not ig_user_id:
-            errors.append(
-                'Instagram: Connect Instagram from Social Connections '
-                '(link an Instagram Business account to your Facebook Page).'
+        from .instagram_login import (
+            publish_instagram_login_photo,
+            public_image_url_for_instagram,
+            resolve_instagram_login_credentials,
+        )
+
+        try:
+            ig_creds = resolve_instagram_login_credentials(post.user)
+            image_url = public_image_url_for_instagram(post.image.url)
+            ig_id = publish_instagram_login_photo(
+                ig_user_id=ig_creds['ig_user_id'],
+                access_token=ig_creds['access_token'],
+                image_url=image_url,
+                caption=caption,
             )
-        else:
-            try:
-                image_url = absolute_media_url(post.image.url)
-                if image_url.startswith('http://localhost') or image_url.startswith('http://127.0.0.1'):
-                    raise MetaAPIError(
-                        'Instagram needs a public HTTPS image URL. '
-                        'Set PUBLIC_BASE_URL to a public tunnel/domain Meta can reach.'
-                    )
-                ig_id = publish_instagram_photo(
-                    ig_user_id=ig_user_id,
-                    page_token=creds['page_token'],
-                    image_url=image_url,
-                    caption=caption,
-                )
-                result['instagram'] = ig_id
-                post.instagram_media_id = ig_id
-                post.instagram_published_at = timezone.now()
-                post.publish_to_instagram = True
-                update_fields.extend([
-                    'instagram_media_id',
-                    'instagram_published_at',
-                    'publish_to_instagram',
-                ])
-                logger.info(
-                    'Published post id=%s to Instagram %s (via %s)',
-                    post.pk,
-                    ig_user_id,
-                    creds.get('source'),
-                )
-            except MetaAPIError as exc:
-                errors.append(f'Instagram: {exc}')
-            except Exception as exc:
-                logger.exception('Unexpected Instagram publish error for post id=%s', post.pk)
-                errors.append(f'Instagram: {exc}')
+            result['instagram'] = ig_id
+            post.instagram_media_id = ig_id
+            post.instagram_published_at = timezone.now()
+            post.publish_to_instagram = True
+            update_fields.extend([
+                'instagram_media_id',
+                'instagram_published_at',
+                'publish_to_instagram',
+            ])
+            logger.info(
+                'Published post id=%s to Instagram %s (via %s)',
+                post.pk,
+                ig_creds['ig_user_id'],
+                ig_creds.get('source'),
+            )
+        except MetaAPIError as exc:
+            errors.append(f'Instagram: {exc}')
+        except Exception as exc:
+            logger.exception('Unexpected Instagram publish error for post id=%s', post.pk)
+            errors.append(f'Instagram: {exc}')
 
     if update_fields:
         update_fields.append('updated_at')
