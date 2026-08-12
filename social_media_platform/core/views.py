@@ -10,6 +10,21 @@ def home_view(request):
             return redirect('subscriptions:dashboard')
         return redirect('subscriptions:plans')
 
+    promises = [
+        {
+            'title': 'One caption, many destinations',
+            'desc': 'Write once, then send to Facebook, Instagram, or both — without rebuilding the post.',
+        },
+        {
+            'title': 'Schedule with confidence',
+            'desc': 'Pick the moment that fits your audience. SocialFlow posts when you planned it.',
+        },
+        {
+            'title': 'Keep drafts close',
+            'desc': 'Park unfinished work, come back later, and publish when it feels right.',
+        },
+    ]
+
     features = [
         {
             'icon': '◷',
@@ -43,13 +58,51 @@ def home_view(request):
         },
     ]
 
+    pipeline = [
+        {
+            'title': 'Draft',
+            'desc': 'Capture the idea before it’s ready for the world.',
+        },
+        {
+            'title': 'Scheduled',
+            'desc': 'Lock a time and let SocialFlow handle the send.',
+        },
+        {
+            'title': 'Published',
+            'desc': 'Confirm it went live across your connected channels.',
+        },
+        {
+            'title': 'Failed',
+            'desc': 'Spot issues quickly and retry without starting over.',
+        },
+    ]
+
+    personas = [
+        {
+            'title': 'Creators',
+            'desc': 'Keep a steady posting rhythm without living inside Meta’s apps all day.',
+        },
+        {
+            'title': 'Small brands',
+            'desc': 'Manage Page + Instagram publishing from one calm dashboard.',
+        },
+        {
+            'title': 'Solo marketers',
+            'desc': 'Draft, schedule, and ship content without a heavy social suite.',
+        },
+    ]
+
     return render(request, 'core/home.html', {
+        'promises': promises,
         'features': features,
+        'pipeline': pipeline,
+        'personas': personas,
     })
 
 
 def privacy_policy_view(request):
     return render(request, 'privacy-policy.html')
+
 
 def terms_of_service_view(request):
     return render(request, 'terms-of-service.html')

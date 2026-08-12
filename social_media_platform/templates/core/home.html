@@ -13,6 +13,7 @@
   <div class="nav-links">
     <a href="#how" class="nav-link">How it works</a>
     <a href="#features" class="nav-link">Features</a>
+    <a href="#who" class="nav-link">Who it’s for</a>
     <a href="{% url 'accounts:login' %}" class="nav-link">Sign in</a>
     <a href="{% url 'accounts:signup' %}" class="btn-primary nav-btn">Start free</a>
   </div>
@@ -20,6 +21,7 @@
 {% endblock %}
 
 {% block content %}
+{# 1 — Hero banner (unchanged composition) #}
 <section class="hero-bleed">
   <div class="hero-visual" aria-hidden="true">
     <div class="hero-aurora hero-aurora-a"></div>
@@ -34,31 +36,18 @@
       <div class="stream-track">
         <div class="stream-post stream-post-1">
           <div class="stream-thumb"></div>
-          <div class="stream-lines">
-            <span></span><span></span>
-          </div>
-          <div class="stream-platforms">
-            <i class="plat-fb">f</i>
-            <i class="plat-ig">ig</i>
-          </div>
+          <div class="stream-lines"><span></span><span></span></div>
+          <div class="stream-platforms"><i class="plat-fb">f</i><i class="plat-ig">ig</i></div>
         </div>
         <div class="stream-post stream-post-2">
           <div class="stream-thumb"></div>
-          <div class="stream-lines">
-            <span></span><span></span>
-          </div>
-          <div class="stream-platforms">
-            <i class="plat-fb">f</i>
-          </div>
+          <div class="stream-lines"><span></span><span></span></div>
+          <div class="stream-platforms"><i class="plat-fb">f</i></div>
         </div>
         <div class="stream-post stream-post-3">
           <div class="stream-thumb"></div>
-          <div class="stream-lines">
-            <span></span><span></span>
-          </div>
-          <div class="stream-platforms">
-            <i class="plat-ig">ig</i>
-          </div>
+          <div class="stream-lines"><span></span><span></span></div>
+          <div class="stream-platforms"><i class="plat-ig">ig</i></div>
         </div>
       </div>
     </div>
@@ -77,6 +66,26 @@
   </div>
 </section>
 
+{# 2 — Promise / why #}
+<section id="promise" class="home-section promise-section">
+  <div class="section-header reveal">
+    <p class="section-kicker">The idea</p>
+    <h2 class="section-title">Stop juggling apps.<br><em>Start a publishing flow.</em></h2>
+    <p class="section-subtitle">
+      SocialFlow brings caption, image, schedule, and publish into one place — so posting feels intentional, not rushed.
+    </p>
+  </div>
+  <div class="promise-grid">
+    {% for item in promises %}
+    <article class="promise-item reveal" style="--d: {{ forloop.counter0 }}">
+      <h3>{{ item.title }}</h3>
+      <p>{{ item.desc }}</p>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
+{# 3 — How it works #}
 <section id="how" class="home-section how-section">
   <div class="section-header how-header reveal">
     <p class="section-kicker">How it works</p>
@@ -99,7 +108,6 @@
         <span class="viz-node viz-ig">ig</span>
       </div>
     </li>
-
     <li class="how-chapter how-chapter-flip reveal" style="--d: 1">
       <div class="how-chapter-copy">
         <span class="how-giant" aria-hidden="true">02</span>
@@ -112,12 +120,9 @@
           <span class="viz-swatch b"></span>
           <span class="viz-swatch c"></span>
         </div>
-        <div class="viz-caption">
-          <span></span><span></span>
-        </div>
+        <div class="viz-caption"><span></span><span></span></div>
       </div>
     </li>
-
     <li class="how-chapter reveal" style="--d: 2">
       <div class="how-chapter-copy">
         <span class="how-giant" aria-hidden="true">03</span>
@@ -125,38 +130,112 @@
         <p>Go live now, or set a time and let SocialFlow post for you.</p>
       </div>
       <div class="how-viz how-viz-schedule" aria-hidden="true">
-        <div class="viz-clock">
-          <span class="viz-hand"></span>
-        </div>
-        <div class="viz-pulse">
-          <span>Now</span>
-          <span>Later</span>
-        </div>
+        <div class="viz-clock"><span class="viz-hand"></span></div>
+        <div class="viz-pulse"><span>Now</span><span>Later</span></div>
       </div>
     </li>
   </ol>
 </section>
 
-<section id="features" class="features-band">
-  <div class="features-band-inner">
-    <div class="section-header features-header reveal">
-      <p class="section-kicker">Features</p>
-      <h2 class="section-title">Everything you need<br><em>to stay consistent</em></h2>
-      <p class="section-subtitle">A focused toolkit for creators and teams who publish on purpose.</p>
+{# 4 — Platforms #}
+<section id="platforms" class="platforms-band">
+  <div class="home-section platforms-inner">
+    <div class="section-header reveal">
+      <p class="section-kicker">Platforms</p>
+      <h2 class="section-title">One workspace.<br><em>Two networks.</em></h2>
+      <p class="section-subtitle">Connect once, then choose Facebook, Instagram, or both for every post.</p>
     </div>
+    <div class="platform-pair">
+      <article class="platform-panel reveal">
+        <span class="platform-badge plat-fb-bg" aria-hidden="true">f</span>
+        <h3>Facebook Page</h3>
+        <p>Publish to your Page with the same caption and creative you already prepared.</p>
+      </article>
+      <article class="platform-panel reveal" style="--d: 1">
+        <span class="platform-badge plat-ig-bg" aria-hidden="true">ig</span>
+        <h3>Instagram</h3>
+        <p>Post to Instagram from SocialFlow — no separate upload hop required.</p>
+      </article>
+    </div>
+  </div>
+</section>
 
-    <div class="feature-river">
-      {% for feature in features %}
-      <article class="feature-drop reveal {% cycle 'drop-left' 'drop-right' %}" style="--d: {{ forloop.counter0 }}">
-        <span class="feature-wash" aria-hidden="true">0{{ forloop.counter }}</span>
-        <div class="feature-drop-inner">
-          <span class="feature-mark" aria-hidden="true">{{ feature.icon }}</span>
-          <h3 class="feature-title">{{ feature.title }}</h3>
-          <p class="feature-desc">{{ feature.desc }}</p>
-        </div>
+{# 5 — Features #}
+<section id="features" class="home-section features-section">
+  <div class="section-header reveal">
+    <p class="section-kicker">Features</p>
+    <h2 class="section-title">Everything you need<br><em>to stay consistent</em></h2>
+    <p class="section-subtitle">A focused toolkit for creators and teams who publish on purpose.</p>
+  </div>
+  <div class="features-grid">
+    {% for feature in features %}
+    <article class="feature-tile reveal" style="--d: {{ forloop.counter0 }}">
+      <span class="feature-mark" aria-hidden="true">{{ feature.icon }}</span>
+      <h3 class="feature-title">{{ feature.title }}</h3>
+      <p class="feature-desc">{{ feature.desc }}</p>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
+{# 6 — AI images #}
+<section id="ai" class="ai-band">
+  <div class="home-section ai-inner">
+    <div class="ai-layout">
+      <div class="ai-copy reveal">
+        <p class="section-kicker">AI images</p>
+        <h2 class="section-title">Describe it.<br><em>Choose the look.</em></h2>
+        <p class="section-subtitle">
+          Generate three image options from a short prompt, pick the one that fits, and keep moving toward publish.
+        </p>
+        <ul class="ai-points">
+          <li>Three options per generation</li>
+          <li>Swap visuals without rewriting the caption</li>
+          <li>Save drafts when you’re not ready yet</li>
+        </ul>
+      </div>
+      <div class="ai-visual reveal" style="--d: 1" aria-hidden="true">
+        <div class="ai-option is-pick"><span>A</span></div>
+        <div class="ai-option"><span>B</span></div>
+        <div class="ai-option"><span>C</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# 7 — Pipeline #}
+<section id="pipeline" class="home-section pipeline-section">
+  <div class="section-header reveal">
+    <p class="section-kicker">Your pipeline</p>
+    <h2 class="section-title">See every post<br><em>at a glance</em></h2>
+    <p class="section-subtitle">Drafts, scheduled, published, and failed — tracked in one calm dashboard.</p>
+  </div>
+  <div class="pipeline-track">
+    {% for stage in pipeline %}
+    <article class="pipeline-stage reveal" style="--d: {{ forloop.counter0 }}">
+      <span class="pipeline-num">0{{ forloop.counter }}</span>
+      <h3>{{ stage.title }}</h3>
+      <p>{{ stage.desc }}</p>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+
+{# 8 — Who it’s for + CTA #}
+<section id="who" class="who-band">
+  <div class="home-section who-inner">
+    <div class="section-header reveal">
+      <p class="section-kicker">Who it’s for</p>
+      <h2 class="section-title">Built for people<br><em>who actually post</em></h2>
+      <p class="section-subtitle">Whether you run a brand page or create for yourself, SocialFlow keeps the publishing path short.</p>
+    </div>
+    <div class="who-grid">
+      {% for persona in personas %}
+      <article class="who-item reveal" style="--d: {{ forloop.counter0 }}">
+        <h3>{{ persona.title }}</h3>
+        <p>{{ persona.desc }}</p>
       </article>
       {% endfor %}
-      <div class="feature-spine" aria-hidden="true"></div>
     </div>
   </div>
 </section>
