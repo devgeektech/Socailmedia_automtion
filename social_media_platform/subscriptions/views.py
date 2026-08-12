@@ -52,6 +52,7 @@ def dashboard_view(request):
     posts = Post.objects.filter(user=request.user)
     stats = {
         'total': posts.count(),
+        'drafts': posts.filter(status=Post.STATUS_DRAFT).count(),
         'scheduled': posts.filter(status=Post.STATUS_SCHEDULED).count(),
         'published': posts.filter(status=Post.STATUS_PUBLISHED).count(),
         'failed': posts.filter(status=Post.STATUS_FAILED).count(),

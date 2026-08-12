@@ -71,3 +71,8 @@ class Post(models.Model):
         self.scheduled_at = when
         self.published_at = None
         self.save(update_fields=['status', 'scheduled_at', 'published_at', 'updated_at'])
+
+    def mark_draft(self):
+        self.status = self.STATUS_DRAFT
+        self.published_at = None
+        self.save(update_fields=['status', 'published_at', 'updated_at'])

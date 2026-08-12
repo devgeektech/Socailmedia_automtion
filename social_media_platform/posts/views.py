@@ -58,6 +58,105 @@ def _safe_temp_path(relative_path: str, user_id: int) -> Path | None:
     return full if full.is_file() else None
 
 
+def _attach_ai_image_optional(post, form):
+    """Attach a selected temp image to the post if available (draft save)."""
+    generated_path = (form.cleaned_data.get('generated_image_path') or '').strip()
+    temp_file = _safe_temp_path(generated_path, post.user_id)
+    if not temp_file:
+        return
+    with temp_file.open('rb') as fh:
+        if post.image:
+            post.image.delete(save=False)
+        post.image.save(temp_file.name, File(fh), save=False)
+    try:
+        temp_file.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _save_draft_from_form(request, form, *, post=None):
+    """Create or update a draft post from the form."""
+    if post is None:
+        post = form.save(commit=False)
+        post.user = request.user
+    else:
+        post = form.save(commit=False)
+    _attach_ai_image_optional(post, form)
+    post.save()
+    form.save_draft(post)
+    return post
+
+
+def _post_form_context(request, form, *, is_edit, post=None, page_title='Create Post'):
+    profile = getattr(request.user, 'profile', None)
+    from .meta import facebook_publish_ready, instagram_publish_ready
+
+    ctx = {
+        'form': form,
+        'subscription': request.subscription,
+        'is_edit': is_edit,
+        'page_title': page_title,
+        'meta_connected': bool(profile and profile.meta_connected),
+        'facebook_ready': facebook_publish_ready(request.user),
+        'instagram_ready': instagram_publish_ready(request.user),
+    }
+    if post is not None:
+        ctx['post'] = post
+        ctx['is_draft'] = post.status == Post.STATUS_DRAFT
+    else:
+        ctx['is_draft'] = False
+    return ctx
+
+
+def _handle_post_submit(request, form, *, post=None):
+    """Publish or schedule after validation. Returns redirect response or None."""
+    if post is None:
+        post = form.save(commit=False)
+        post.user = request.user
+    else:
+        post = form.save(commit=False)
+
+    try:
+        _attach_ai_image(post, form, force_regenerate=post.pk is None)
+    except ImageGenerationError as exc:
+        form.add_error('image_prompt', str(exc))
+        return None
+
+    post.save()
+    try:
+        form.apply_publish_action(post)
+    except Exception as exc:
+        from .meta import MetaAPIError
+        from .instagram_login import is_instagram_not_ready
+
+        if isinstance(exc, MetaAPIError) and is_instagram_not_ready(exc):
+            post.refresh_from_db()
+            messages.success(request, 'Post published successfully.')
+            return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
+        if isinstance(exc, MetaAPIError):
+            from .meta import friendly_user_error
+
+            messages.error(request, friendly_user_error(exc))
+            return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
+        raise
+
+    if post.status == Post.STATUS_PUBLISHED:
+        messages.success(request, 'Post published successfully.')
+    else:
+        from django.utils import timezone as dj_tz
+
+        when = post.scheduled_at
+        if when:
+            local_when = dj_tz.localtime(when)
+            messages.success(
+                request,
+                f'Your post is scheduled for {local_when.strftime("%d %b %Y, %I:%M %p")}.',
+            )
+        else:
+            messages.success(request, 'Your post is scheduled.')
+    return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
+
+
 def _attach_ai_image(post, form, *, force_regenerate=False):
     """Attach generated image from temp path or call OpenAI."""
     generated_path = (form.cleaned_data.get('generated_image_path') or '').strip()
@@ -164,67 +263,24 @@ def generate_image_view(request):
 @subscription_required
 def post_create_view(request):
     if request.method == 'POST':
-        form = PostForm(request.POST, user=request.user)
+        save_draft = request.POST.get('save_draft') == '1'
+        form = PostForm(request.POST, user=request.user, draft_mode=save_draft)
         if form.is_valid():
-            post = form.save(commit=False)
-            post.user = request.user
-            try:
-                _attach_ai_image(post, form, force_regenerate=True)
-            except ImageGenerationError as exc:
-                form.add_error('image_prompt', str(exc))
-            else:
-                post.save()
-                try:
-                    form.apply_publish_action(post)
-                except Exception as exc:
-                    from .meta import MetaAPIError
-                    from .instagram_login import is_instagram_not_ready
-
-                    if isinstance(exc, MetaAPIError) and is_instagram_not_ready(exc):
-                        post.refresh_from_db()
-                        messages.success(request, 'Post published successfully.')
-                        return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
-                    if isinstance(exc, MetaAPIError):
-                        from .meta import friendly_user_error
-
-                        messages.error(request, friendly_user_error(exc))
-                        return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
-                    raise
-                if post.status == Post.STATUS_PUBLISHED:
-                    messages.success(request, 'Post published successfully.')
-                else:
-                    from django.utils import timezone as dj_tz
-
-                    platforms = []
-                    if post.publish_to_facebook:
-                        platforms.append('Facebook')
-                    if post.publish_to_instagram:
-                        platforms.append('Instagram')
-                    when = post.scheduled_at
-                    if platforms and when:
-                        local_when = dj_tz.localtime(when)
-                        messages.success(
-                            request,
-                            f'Your post is scheduled for {local_when.strftime("%d %b %Y, %I:%M %p")}.',
-                        )
-                    else:
-                        messages.success(request, 'Your post is scheduled.')
+            if save_draft:
+                _save_draft_from_form(request, form)
+                messages.success(request, 'Draft saved. You can continue editing anytime.')
                 return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
+            redirect_response = _handle_post_submit(request, form)
+            if redirect_response:
+                return redirect_response
     else:
         form = PostForm(user=request.user)
 
-    profile = getattr(request.user, 'profile', None)
-    from .meta import facebook_publish_ready, instagram_publish_ready
-
-    return render(request, 'posts/post_form.html', {
-        'form': form,
-        'subscription': request.subscription,
-        'is_edit': False,
-        'page_title': 'Create Post',
-        'meta_connected': bool(profile and profile.meta_connected),
-        'facebook_ready': facebook_publish_ready(request.user),
-        'instagram_ready': instagram_publish_ready(request.user),
-    })
+    return render(
+        request,
+        'posts/post_form.html',
+        _post_form_context(request, form, is_edit=False),
+    )
 
 
 @subscription_required
@@ -234,49 +290,33 @@ def post_edit_view(request, pk):
         messages.error(request, 'This post cannot be edited.')
         return redirect('subscriptions:dashboard')
 
+    is_draft = post.status == Post.STATUS_DRAFT
+    page_title = 'Continue draft' if is_draft else 'Edit Post'
+
     if request.method == 'POST':
-        form = PostForm(request.POST, instance=post, user=request.user)
+        save_draft = request.POST.get('save_draft') == '1'
+        form = PostForm(
+            request.POST,
+            instance=post,
+            user=request.user,
+            draft_mode=save_draft,
+        )
         if form.is_valid():
-            post = form.save(commit=False)
-            try:
-                _attach_ai_image(post, form)
-            except ImageGenerationError as exc:
-                form.add_error('image_prompt', str(exc))
-            else:
-                post.save()
-                try:
-                    form.apply_publish_action(post)
-                except Exception as exc:
-                    from .meta import MetaAPIError
-                    from .instagram_login import is_instagram_not_ready
-
-                    if isinstance(exc, MetaAPIError) and is_instagram_not_ready(exc):
-                        messages.success(request, 'Post updated successfully.')
-                        return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
-                    if isinstance(exc, MetaAPIError):
-                        from .meta import friendly_user_error
-
-                        messages.error(request, friendly_user_error(exc))
-                        return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
-                    raise
-                messages.success(request, 'Post updated successfully.')
+            if save_draft:
+                _save_draft_from_form(request, form, post=post)
+                messages.success(request, 'Draft saved.')
                 return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
+            redirect_response = _handle_post_submit(request, form, post=post)
+            if redirect_response:
+                return redirect_response
     else:
         form = PostForm(instance=post, user=request.user)
 
-    profile = getattr(request.user, 'profile', None)
-    from .meta import facebook_publish_ready, instagram_publish_ready
-
-    return render(request, 'posts/post_form.html', {
-        'form': form,
-        'post': post,
-        'subscription': request.subscription,
-        'is_edit': True,
-        'page_title': 'Edit Post',
-        'meta_connected': bool(profile and profile.meta_connected),
-        'facebook_ready': facebook_publish_ready(request.user),
-        'instagram_ready': instagram_publish_ready(request.user),
-    })
+    return render(
+        request,
+        'posts/post_form.html',
+        _post_form_context(request, form, is_edit=True, post=post, page_title=page_title),
+    )
 
 @subscription_required
 def post_delete_view(request, pk):

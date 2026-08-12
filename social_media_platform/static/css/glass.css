@@ -272,6 +272,35 @@ body {
   display: none;
 }
 
+.btn-secondary.is-loading {
+  cursor: wait;
+  opacity: 0.88;
+  pointer-events: none;
+}
+
+.draft-btn-loading {
+  display: none;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.draft-btn-loading[hidden] {
+  display: none !important;
+}
+
+.btn-secondary.is-loading .draft-btn-loading {
+  display: inline-flex;
+}
+
+.btn-secondary.is-loading .draft-btn-label {
+  display: none;
+}
+
+.btn-secondary.is-loading .ai-spinner {
+  border-color: rgba(12, 31, 46, 0.15);
+  border-top-color: var(--ink, #0c1f2e);
+}
+
 .btn-primary.is-loading .ai-spinner {
   border-color: rgba(255, 255, 255, 0.25);
   border-top-color: #fff;

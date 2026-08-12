@@ -78,9 +78,10 @@ class PostForm(forms.ModelForm):
             'publish_to_instagram': 'Instagram',
         }
 
-    def __init__(self, *args, user=None, **kwargs):
+    def __init__(self, *args, user=None, draft_mode=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.user = user
+        self.draft_mode = draft_mode
         instance = kwargs.get('instance')
         self.fields['image_prompt'].required = not (instance and instance.pk and instance.image)
 
@@ -111,8 +112,19 @@ class PostForm(forms.ModelForm):
         elif not instance:
             self.fields['publish_to_instagram'].initial = True
 
+        if instance and instance.status == Post.STATUS_DRAFT:
+            if instance.scheduled_at:
+                self.fields['publish_action'].initial = self.SCHEDULE
+                local = timezone.localtime(instance.scheduled_at)
+                self.fields['scheduled_at'].initial = local.strftime('%Y-%m-%dT%H:%M')
+            else:
+                self.fields['publish_action'].initial = self.PUBLISH_NOW
+
     def clean(self):
         cleaned = super().clean()
+        if getattr(self, 'draft_mode', False):
+            return self._clean_draft(cleaned)
+
         action = cleaned.get('publish_action')
         scheduled_at = cleaned.get('scheduled_at')
         image_prompt = (cleaned.get('image_prompt') or '').strip()
@@ -148,6 +160,46 @@ class PostForm(forms.ModelForm):
             cleaned['publish_to_instagram'] = False
 
         return cleaned
+
+    def _clean_draft(self, cleaned):
+        """Save draft — no image or schedule required."""
+        instance = self.instance if self.instance and self.instance.pk else None
+        description = (cleaned.get('description') or '').strip()
+        caption = (cleaned.get('caption') or '').strip()
+        image_prompt = (cleaned.get('image_prompt') or '').strip()
+        generated_path = (cleaned.get('generated_image_path') or '').strip()
+        has_image = bool(instance and instance.image)
+
+        if not any([description, caption, image_prompt, generated_path, has_image]):
+            raise forms.ValidationError('Add some text or an image before saving a draft.')
+
+        scheduled_at = cleaned.get('scheduled_at')
+        if scheduled_at and timezone.is_naive(scheduled_at):
+            cleaned['scheduled_at'] = timezone.make_aware(
+                scheduled_at,
+                timezone.get_current_timezone(),
+            )
+
+        from .meta import facebook_publish_ready, instagram_publish_ready
+
+        if not (self.user and facebook_publish_ready(self.user)):
+            cleaned['publish_to_facebook'] = False
+        if not (self.user and instagram_publish_ready(self.user)):
+            cleaned['publish_to_instagram'] = False
+
+        return cleaned
+
+    def save_draft(self, post):
+        """Persist post as draft without publishing."""
+        post.status = Post.STATUS_DRAFT
+        post.published_at = None
+        action = self.cleaned_data.get('publish_action')
+        if action == self.SCHEDULE and self.cleaned_data.get('scheduled_at'):
+            post.scheduled_at = self.cleaned_data['scheduled_at']
+        elif action != self.SCHEDULE:
+            post.scheduled_at = None
+        post.save()
+        return post
 
     def apply_publish_action(self, post):
         """

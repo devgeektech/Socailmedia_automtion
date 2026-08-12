@@ -73,6 +73,10 @@
       <div class="stat-label">Total Posts</div>
     </div>
     <div class="glass-card stat-card">
+      <div class="stat-value">{{ stats.drafts }}</div>
+      <div class="stat-label">Drafts</div>
+    </div>
+    <div class="glass-card stat-card">
       <div class="stat-value">{{ stats.scheduled }}</div>
       <div class="stat-label">Scheduled</div>
     </div>
@@ -159,7 +163,14 @@
                     </svg>
                 </a>
 
-                {% if post.can_edit or post.status == 'published' %}
+                {% if post.status == 'draft' %}
+                <a href="{% url 'posts:edit' post.pk %}" class="icon-btn" title="Continue draft" aria-label="Continue draft">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 20h9"></path>
+                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                    </svg>
+                </a>
+                {% elif post.can_edit or post.status == 'published' %}
                 <a href="{% url 'posts:edit' post.pk %}" class="icon-btn" title="{% if post.status == 'scheduled' %}Reschedule{% else %}Edit{% endif %}" aria-label="{% if post.status == 'scheduled' %}Reschedule{% else %}Edit{% endif %}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M12 20h9"></path>

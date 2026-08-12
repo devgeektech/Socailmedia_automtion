@@ -21,6 +21,10 @@
       {% csrf_token %}
       {{ form.generated_image_path }}
 
+      {% if form.non_field_errors %}
+      <p class="form-error">{{ form.non_field_errors.0 }}</p>
+      {% endif %}
+
       <div class="form-group">
         <label class="form-label" for="{{ form.description.id_for_label }}">{{ form.description.label }}</label>
         {{ form.description }}
@@ -145,10 +149,19 @@
 
       <div class="form-actions">
         <button type="submit" class="btn-primary" id="btn-submit-post" style="width:auto;">
-          <span class="submit-btn-label" id="submit-btn-label">{% if is_edit %}Save changes{% else %}Create post{% endif %}</span>
+          <span class="submit-btn-label" id="submit-btn-label">
+            {% if is_draft %}Publish{% elif is_edit %}Save changes{% else %}Create post{% endif %}
+          </span>
           <span class="submit-btn-loading" id="submit-btn-loading" hidden>
             <span class="ai-spinner" aria-hidden="true"></span>
-            {% if is_edit %}Saving…{% else %}Publishing…{% endif %}
+            Publishing…
+          </span>
+        </button>
+        <button type="submit" name="save_draft" value="1" class="btn-secondary" id="btn-save-draft" style="width:auto;">
+          <span class="draft-btn-label" id="draft-btn-label">Save draft</span>
+          <span class="draft-btn-loading" id="draft-btn-loading" hidden>
+            <span class="ai-spinner" aria-hidden="true"></span>
+            Saving…
           </span>
         </button>
         <a href="{% url 'subscriptions:dashboard' %}" class="btn-secondary js-clear-draft" id="btn-cancel-post">Cancel</a>
@@ -207,6 +220,9 @@
   var submitBtn = document.getElementById('btn-submit-post');
   var submitBtnLabel = document.getElementById('submit-btn-label');
   var submitBtnLoading = document.getElementById('submit-btn-loading');
+  var saveDraftBtn = document.getElementById('btn-save-draft');
+  var draftBtnLabel = document.getElementById('draft-btn-label');
+  var draftBtnLoading = document.getElementById('draft-btn-loading');
   var cancelBtn = document.getElementById('btn-cancel-post');
   var aiStatus = document.getElementById('ai-status');
   var regenerate = document.getElementById('id_regenerate_image');
@@ -340,6 +356,19 @@
     }
     if (submitBtnLabel) submitBtnLabel.hidden = !!isLoading;
     if (submitBtnLoading) submitBtnLoading.hidden = !isLoading;
+    if (saveDraftBtn) saveDraftBtn.disabled = !!isLoading;
+    if (cancelBtn) cancelBtn.classList.toggle('is-disabled', !!isLoading);
+    if (generateBtn) generateBtn.disabled = !!isLoading;
+  }
+
+  function setSavingDraft(isLoading) {
+    if (saveDraftBtn) {
+      saveDraftBtn.disabled = !!isLoading;
+      saveDraftBtn.classList.toggle('is-loading', !!isLoading);
+    }
+    if (draftBtnLabel) draftBtnLabel.hidden = !!isLoading;
+    if (draftBtnLoading) draftBtnLoading.hidden = !isLoading;
+    if (submitBtn) submitBtn.disabled = !!isLoading;
     if (cancelBtn) cancelBtn.classList.toggle('is-disabled', !!isLoading);
     if (generateBtn) generateBtn.disabled = !!isLoading;
   }
@@ -527,6 +556,16 @@
 
       if (submitBtn && submitBtn.disabled) {
         event.preventDefault();
+        return;
+      }
+      if (saveDraftBtn && saveDraftBtn.disabled) {
+        event.preventDefault();
+        return;
+      }
+
+      var submitter = event.submitter;
+      if (submitter && submitter.name === 'save_draft') {
+        setSavingDraft(true);
         return;
       }
       setPublishing(true);
