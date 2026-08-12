@@ -443,7 +443,6 @@
     var thumb = btn.querySelector('img');
     showImage(url || (thumb && (thumb.currentSrc || thumb.src)), thumb);
     if (aiStatus) aiStatus.textContent = 'Image selected — save the post to keep it.';
-    saveDraft();
   }
 
   function renderOptions(images) {
@@ -507,7 +506,6 @@
       previewCaption.textContent = caption ? caption.value : '';
       previewCaption.hidden = !(caption && caption.value.trim());
     }
-    saveDraft();
   }
 
   function updateScheduleUI() {
@@ -527,31 +525,37 @@
         previewSchedule.textContent = 'Pick a schedule time';
       }
     }
-    saveDraft();
   }
 
   if (description) description.addEventListener('input', updateText);
   if (caption) caption.addEventListener('input', updateText);
-  if (imagePrompt) imagePrompt.addEventListener('input', saveDraft);
   if (scheduledAt) scheduledAt.addEventListener('change', updateScheduleUI);
   document.querySelectorAll('input[name="publish_action"]').forEach(function (el) {
     el.addEventListener('change', updateScheduleUI);
   });
 
   document.querySelectorAll('.js-save-draft-before-leave').forEach(function (link) {
-    link.addEventListener('click', function () {
-      saveDraft();
-      try { sessionStorage.setItem(DRAFT_RETURN_KEY, '1'); } catch (err) { /* ignore */ }
+    link.addEventListener('click', function (event) {
+      if (formLocked) {
+        event.preventDefault();
+        return;
+      }
+      saveConnectDraft();
     });
   });
 
   if (form) {
     form.addEventListener('submit', function (event) {
-      // Keep draft + images if server validation fails and re-renders the form.
-      saveDraft();
+      if (formLocked) {
+        event.preventDefault();
+        return;
+      }
 
       var selected = document.querySelector('input[name="publish_action"]:checked');
-      if (selected && selected.value === 'schedule') {
+      var submitter = event.submitter;
+      var isDraftSubmit = !!(submitter && submitter.name === 'save_draft');
+
+      if (!isDraftSubmit && selected && selected.value === 'schedule') {
         var when = scheduledAt ? scheduledAt.value.trim() : '';
         if (!when) {
           event.preventDefault();
@@ -571,26 +575,18 @@
         if (clientErr) clientErr.remove();
       }
 
-      if (submitBtn && submitBtn.disabled) {
-        event.preventDefault();
-        return;
-      }
-      if (saveDraftBtn && saveDraftBtn.disabled) {
-        event.preventDefault();
-        return;
-      }
-
-      var submitter = event.submitter;
-      if (submitter && submitter.name === 'save_draft') {
-        setSavingDraft(true);
-        return;
-      }
-      setPublishing(true);
+      // Lock immediately so Create post cannot run while Save draft is loading (and vice versa)
+      clearDraft();
+      lockForm(isDraftSubmit ? 'draft' : 'publish');
     });
   }
 
   document.querySelectorAll('.js-clear-draft').forEach(function (link) {
-    link.addEventListener('click', function () {
+    link.addEventListener('click', function (event) {
+      if (formLocked) {
+        event.preventDefault();
+        return;
+      }
       clearDraft();
       if (form) form.reset();
       if (generatedPath) generatedPath.value = '';
@@ -623,6 +619,7 @@
 
   if (generateBtn) {
     generateBtn.addEventListener('click', function () {
+      if (formLocked) return;
       var prompt = imagePrompt ? imagePrompt.value.trim() : '';
       if (!prompt) {
         if (aiStatus) aiStatus.textContent = 'Enter an image prompt first.';
@@ -658,7 +655,6 @@
           }
           renderOptions(imgs);
           if (aiStatus) aiStatus.textContent = 'Images ready — pick one.';
-          saveDraft();
         })
         .catch(function (err) {
           if (picker) picker.hidden = true;
@@ -673,24 +669,19 @@
   }
 
   setGenerating(false);
-  suppressDraftSave = true;
-  restoreDraft();
-  // After a failed submit, hidden path may still be set — keep preview even if draft was empty of thumbs
+  restoreConnectDraft();
   if (generatedPath && generatedPath.value && previewImage && (previewImage.hidden || !previewImage.src)) {
     var mediaPath = generatedPath.value.replace(/^\/+/, '');
     showImage('{{ MEDIA_URL|default:"/media/" }}' + mediaPath);
   }
   updateText();
   updateScheduleUI();
-  suppressDraftSave = false;
-  saveDraft();
 
   document.querySelectorAll('.platform-card').forEach(function (card) {
     var input = card.querySelector('input[type="checkbox"]');
     if (!input) return;
     function sync() {
       card.classList.toggle('is-selected', input.checked && !input.disabled);
-      saveDraft();
     }
     input.addEventListener('change', sync);
     sync();
