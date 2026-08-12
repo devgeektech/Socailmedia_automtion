@@ -263,13 +263,13 @@ def generate_image_view(request):
 @subscription_required
 def post_create_view(request):
     if request.method == 'POST':
-        save_draft = request.POST.get('save_draft') == '1'
+        save_draft = (request.POST.get('save_draft') or '').strip() == '1'
         form = PostForm(request.POST, user=request.user, draft_mode=save_draft)
         if form.is_valid():
             if save_draft:
                 _save_draft_from_form(request, form)
                 messages.success(request, 'Draft saved. You can continue editing anytime.')
-                return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
+                return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1&tab=draft')
             redirect_response = _handle_post_submit(request, form)
             if redirect_response:
                 return redirect_response
@@ -294,7 +294,7 @@ def post_edit_view(request, pk):
     page_title = 'Continue draft' if is_draft else 'Edit Post'
 
     if request.method == 'POST':
-        save_draft = request.POST.get('save_draft') == '1'
+        save_draft = (request.POST.get('save_draft') or '').strip() == '1'
         form = PostForm(
             request.POST,
             instance=post,
@@ -305,7 +305,7 @@ def post_edit_view(request, pk):
             if save_draft:
                 _save_draft_from_form(request, form, post=post)
                 messages.success(request, 'Draft saved.')
-                return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
+                return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1&tab=draft')
             redirect_response = _handle_post_submit(request, form, post=post)
             if redirect_response:
                 return redirect_response
@@ -321,12 +321,23 @@ def post_edit_view(request, pk):
 @subscription_required
 def post_delete_view(request, pk):
     post = _user_post_or_404(request, pk)
+    was_draft = post.status == Post.STATUS_DRAFT
+    was_published = post.status == Post.STATUS_PUBLISHED
 
     if request.method == 'POST':
         if post.image:
             post.image.delete(save=False)
         post.delete()
-        messages.success(request, 'Post deleted.')
+        messages.success(
+            request,
+            'Draft deleted.' if was_draft else (
+                'Removed from SocialFlow. If it was already posted, it stays on Facebook/Instagram.'
+                if was_published else 'Post deleted.'
+            ),
+        )
+        next_tab = (request.POST.get('next_tab') or '').strip()
+        if next_tab in {'draft', 'published', 'scheduled', 'failed'}:
+            return redirect(reverse('subscriptions:dashboard') + f'?tab={next_tab}')
         return redirect('subscriptions:dashboard')
 
     return render(request, 'posts/post_confirm_delete.html', {

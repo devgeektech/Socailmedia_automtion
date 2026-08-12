@@ -659,11 +659,38 @@ body {
 .stat-card {
   padding: 1.5rem;
   text-align: center;
-  transition: transform 0.25s;
+  transition: transform 0.25s, border-color 0.2s, box-shadow 0.2s;
 }
 
 .stat-card:hover {
   transform: translateY(-3px);
+}
+
+button.post-tab {
+  width: 100%;
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+button.post-tab:hover {
+  transform: translateY(-3px);
+}
+
+button.post-tab.is-active {
+  border-color: rgba(13, 148, 136, 0.45);
+  box-shadow: 0 10px 24px rgba(13, 148, 136, 0.12);
+  background: rgba(13, 148, 136, 0.08);
+}
+
+button.post-tab.is-active .stat-value {
+  color: var(--teal-deep);
+}
+
+.post-tab-empty {
+  margin-top: 0.5rem;
 }
 
 .stat-value {
@@ -2438,6 +2465,10 @@ body {
   padding:20px;
   margin-bottom:18px;
   border-radius:22px;
+}
+
+.social-post-card[hidden]{
+  display:none !important;
 }
 
 .social-post-image{

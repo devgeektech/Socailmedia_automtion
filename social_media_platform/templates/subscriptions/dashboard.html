@@ -67,39 +67,39 @@
     </div>
   </div>
 
-  <div class="stats-grid">
-    <div class="glass-card stat-card">
+  <div class="stats-grid post-tabs" role="tablist" aria-label="Filter posts">
+    <button type="button" class="glass-card stat-card post-tab is-active" role="tab" aria-selected="true" data-tab="all">
       <div class="stat-value">{{ stats.total }}</div>
-      <div class="stat-label">Total Posts</div>
-    </div>
-    <div class="glass-card stat-card">
-      <div class="stat-value">{{ stats.drafts }}</div>
-      <div class="stat-label">Drafts</div>
-    </div>
-    <div class="glass-card stat-card">
-      <div class="stat-value">{{ stats.scheduled }}</div>
-      <div class="stat-label">Scheduled</div>
-    </div>
-    <div class="glass-card stat-card">
+      <div class="stat-label">All posts</div>
+    </button>
+    <button type="button" class="glass-card stat-card post-tab" role="tab" aria-selected="false" data-tab="published">
       <div class="stat-value">{{ stats.published }}</div>
       <div class="stat-label">Published</div>
-    </div>
-    <div class="glass-card stat-card">
+    </button>
+    <button type="button" class="glass-card stat-card post-tab" role="tab" aria-selected="false" data-tab="draft">
+      <div class="stat-value">{{ stats.drafts }}</div>
+      <div class="stat-label">Drafts</div>
+    </button>
+    <button type="button" class="glass-card stat-card post-tab" role="tab" aria-selected="false" data-tab="scheduled">
+      <div class="stat-value">{{ stats.scheduled }}</div>
+      <div class="stat-label">Scheduled</div>
+    </button>
+    <button type="button" class="glass-card stat-card post-tab" role="tab" aria-selected="false" data-tab="failed">
       <div class="stat-value">{{ stats.failed }}</div>
       <div class="stat-label">Failed</div>
-    </div>
+    </button>
   </div>
 
   <div class="posts-section">
     <div class="posts-section-header">
-      <h2 class="posts-section-title">Your posts</h2>
+      <h2 class="posts-section-title" id="posts-tab-title">Your posts</h2>
       <a href="{% url 'posts:create' %}" class="btn-primary btn-sm">+ New Post</a>
     </div>
 
     {% if posts %}
-    <div class="post-list">
+    <div class="post-list" id="post-list">
       {% for post in posts %}
-      <article class="glass-card social-post-card">
+      <article class="glass-card social-post-card" data-status="{{ post.status }}">
         <div class="social-post-image">
             {% if post.image %}
                 <img src="{{ post.image.url }}" alt="{{ post.caption }}">
@@ -181,11 +181,20 @@
 
                 <form method="post"
                       action="{% url 'posts:delete' post.pk %}"
-                      onsubmit="return confirm('Delete this post?');">
+                      onsubmit="return confirm('{% if post.status == 'draft' %}Delete this draft?{% elif post.status == 'published' %}Remove this from SocialFlow? It will stay live on Facebook/Instagram if already posted there.{% elif post.status == 'scheduled' %}Delete this scheduled post? It will not be published.{% else %}Delete this post?{% endif %}');">
 
                     {% csrf_token %}
+                    {% if post.status == 'draft' %}
+                    <input type="hidden" name="next_tab" value="draft">
+                    {% elif post.status == 'published' %}
+                    <input type="hidden" name="next_tab" value="published">
+                    {% elif post.status == 'scheduled' %}
+                    <input type="hidden" name="next_tab" value="scheduled">
+                    {% elif post.status == 'failed' %}
+                    <input type="hidden" name="next_tab" value="failed">
+                    {% endif %}
 
-                    <button type="submit" class="icon-btn delete" title="Delete" aria-label="Delete">
+                    <button type="submit" class="icon-btn delete" title="{% if post.status == 'draft' %}Delete draft{% elif post.status == 'published' %}Remove from SocialFlow{% else %}Delete{% endif %}" aria-label="{% if post.status == 'draft' %}Delete draft{% elif post.status == 'published' %}Remove from SocialFlow{% else %}Delete{% endif %}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <polyline points="3 6 5 6 21 6"></polyline>
                             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -202,6 +211,10 @@
       </article>
       {% endfor %}
     </div>
+    <div class="glass-card dashboard-empty post-tab-empty" id="post-tab-empty" hidden>
+      <p id="post-tab-empty-text">No posts in this tab yet.</p>
+      <a href="{% url 'posts:create' %}" class="btn-primary" style="width:auto;margin-top:1.25rem;">Add Post</a>
+    </div>
     {% else %}
     <div class="glass-card dashboard-empty">
       <p>No posts yet. Create your first post to start scheduling content.</p>
@@ -217,16 +230,78 @@
 (function () {
   try {
     var params = new URLSearchParams(window.location.search);
-    if (params.get('clear_post_draft') !== '1') return;
-    Object.keys(sessionStorage).forEach(function (key) {
-      if (key.indexOf('socialflow_post_draft_') === 0) {
-        sessionStorage.removeItem(key);
-      }
-    });
-    params.delete('clear_post_draft');
-    var next = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
-    window.history.replaceState({}, '', next);
+    if (params.get('clear_post_draft') === '1') {
+      Object.keys(sessionStorage).forEach(function (key) {
+        if (key.indexOf('socialflow_post_draft_') === 0) {
+          sessionStorage.removeItem(key);
+        }
+      });
+      params.delete('clear_post_draft');
+      var next = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+      window.history.replaceState({}, '', next);
+    }
   } catch (err) { /* ignore */ }
+
+  var tabs = document.querySelectorAll('.post-tab');
+  var cards = document.querySelectorAll('.social-post-card[data-status]');
+  var emptyEl = document.getElementById('post-tab-empty');
+  var emptyText = document.getElementById('post-tab-empty-text');
+  var titleEl = document.getElementById('posts-tab-title');
+  var titles = {
+    all: 'Your posts',
+    published: 'Published posts',
+    draft: 'Draft posts',
+    scheduled: 'Scheduled posts',
+    failed: 'Failed posts'
+  };
+  var emptyMessages = {
+    all: 'No posts yet.',
+    published: 'No published posts yet.',
+    draft: 'No drafts yet. Save a draft to continue later.',
+    scheduled: 'No scheduled posts yet.',
+    failed: 'No failed posts.'
+  };
+
+  function activateTab(tabName) {
+    tabs.forEach(function (tab) {
+      var active = tab.getAttribute('data-tab') === tabName;
+      tab.classList.toggle('is-active', active);
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    var visible = 0;
+    cards.forEach(function (card) {
+      var show = tabName === 'all' || card.getAttribute('data-status') === tabName;
+      card.hidden = !show;
+      card.style.display = show ? '' : 'none';
+      if (show) visible += 1;
+    });
+    if (titleEl) titleEl.textContent = titles[tabName] || 'Your posts';
+    if (emptyEl) {
+      var showEmpty = visible === 0 && cards.length > 0;
+      emptyEl.hidden = !showEmpty;
+      emptyEl.style.display = showEmpty ? '' : 'none';
+      if (emptyText) emptyText.textContent = emptyMessages[tabName] || 'No posts in this tab yet.';
+    }
+    try {
+      var url = new URL(window.location.href);
+      if (tabName === 'all') url.searchParams.delete('tab');
+      else url.searchParams.set('tab', tabName);
+      window.history.replaceState({}, '', url.pathname + url.search);
+    } catch (err) { /* ignore */ }
+  }
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      activateTab(tab.getAttribute('data-tab') || 'all');
+    });
+  });
+
+  var initial = 'all';
+  try {
+    var start = new URLSearchParams(window.location.search).get('tab');
+    if (start && titles[start]) initial = start;
+  } catch (err) { /* ignore */ }
+  if (cards.length) activateTab(initial);
 })();
 </script>
 {% endblock %}

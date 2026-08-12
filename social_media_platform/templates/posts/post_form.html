@@ -20,6 +20,7 @@
     <form method="post" class="glass-card post-form-card" id="post-form" novalidate>
       {% csrf_token %}
       {{ form.generated_image_path }}
+      <input type="hidden" name="save_draft" id="id_save_draft" value="">
 
       {% if form.non_field_errors %}
       <p class="form-error">{{ form.non_field_errors.0 }}</p>
@@ -157,16 +158,26 @@
             Publishing…
           </span>
         </button>
-        <button type="submit" name="save_draft" value="1" class="btn-secondary" id="btn-save-draft" style="width:auto;">
+        <button type="submit" class="btn-secondary" id="btn-save-draft" style="width:auto;" data-action="draft">
           <span class="draft-btn-label" id="draft-btn-label">Save draft</span>
           <span class="draft-btn-loading" id="draft-btn-loading" hidden>
             <span class="ai-spinner" aria-hidden="true"></span>
             Saving…
           </span>
         </button>
-        <a href="{% url 'subscriptions:dashboard' %}" class="btn-secondary js-clear-draft" id="btn-cancel-post">Cancel</a>
+        {% if is_draft and post %}
+        <button type="button" class="btn-secondary" id="btn-delete-draft" style="width:auto;color:#b42318;">Delete draft</button>
+        {% endif %}
+        <a href="{% url 'subscriptions:dashboard' %}{% if is_draft %}?tab=draft{% endif %}" class="btn-secondary js-clear-draft" id="btn-cancel-post">Cancel</a>
       </div>
     </form>
+
+    {% if is_draft and post %}
+    <form method="post" action="{% url 'posts:delete' post.pk %}" id="delete-draft-form" hidden>
+      {% csrf_token %}
+      <input type="hidden" name="next_tab" value="draft">
+    </form>
+    {% endif %}
 
     <aside class="glass-card post-preview-panel" aria-live="polite">
       <div class="preview-panel-header">
@@ -224,6 +235,7 @@
   var draftBtnLabel = document.getElementById('draft-btn-label');
   var draftBtnLoading = document.getElementById('draft-btn-loading');
   var cancelBtn = document.getElementById('btn-cancel-post');
+  var saveDraftField = document.getElementById('id_save_draft');
   var aiStatus = document.getElementById('ai-status');
   var regenerate = document.getElementById('id_regenerate_image');
   var picker = document.getElementById('ai-image-picker');
@@ -544,6 +556,29 @@
     });
   });
 
+  if (saveDraftBtn) {
+    saveDraftBtn.addEventListener('click', function () {
+      if (saveDraftField) saveDraftField.value = '1';
+    });
+  }
+  if (submitBtn) {
+    submitBtn.addEventListener('click', function () {
+      if (saveDraftField) saveDraftField.value = '';
+    });
+  }
+
+  var deleteDraftBtn = document.getElementById('btn-delete-draft');
+  var deleteDraftForm = document.getElementById('delete-draft-form');
+  if (deleteDraftBtn && deleteDraftForm) {
+    deleteDraftBtn.addEventListener('click', function () {
+      if (formLocked) return;
+      if (!window.confirm('Delete this draft? This cannot be undone.')) return;
+      formLocked = true;
+      deleteDraftBtn.disabled = true;
+      deleteDraftForm.submit();
+    });
+  }
+
   if (form) {
     form.addEventListener('submit', function (event) {
       if (formLocked) {
@@ -553,12 +588,19 @@
 
       var selected = document.querySelector('input[name="publish_action"]:checked');
       var submitter = event.submitter;
-      var isDraftSubmit = !!(submitter && submitter.name === 'save_draft');
+      var isDraftSubmit = !!(
+        (submitter && submitter.getAttribute('data-action') === 'draft') ||
+        (submitter && submitter.id === 'btn-save-draft')
+      );
+
+      // Set hidden field BEFORE disabling buttons — disabled submit buttons are omitted from POST
+      if (saveDraftField) saveDraftField.value = isDraftSubmit ? '1' : '';
 
       if (!isDraftSubmit && selected && selected.value === 'schedule') {
         var when = scheduledAt ? scheduledAt.value.trim() : '';
         if (!when) {
           event.preventDefault();
+          if (saveDraftField) saveDraftField.value = '';
           if (aiStatus) aiStatus.textContent = '';
           var errEl = document.querySelector('#schedule-field .form-error');
           if (!errEl && scheduleField) {
@@ -575,7 +617,6 @@
         if (clientErr) clientErr.remove();
       }
 
-      // Lock immediately so Create post cannot run while Save draft is loading (and vice versa)
       clearDraft();
       lockForm(isDraftSubmit ? 'draft' : 'publish');
     });
