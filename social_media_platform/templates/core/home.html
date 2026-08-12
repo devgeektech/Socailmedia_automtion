@@ -21,7 +21,6 @@
 {% endblock %}
 
 {% block content %}
-{# 1 — Hero banner (unchanged composition) #}
 <section class="hero-bleed">
   <div class="hero-visual" aria-hidden="true">
     <div class="hero-aurora hero-aurora-a"></div>
@@ -66,120 +65,140 @@
   </div>
 </section>
 
-{# 2 — Promise / why #}
-<section id="promise" class="home-section promise-section">
-  <div class="section-header reveal">
-    <p class="section-kicker">The idea</p>
-    <h2 class="section-title">Stop juggling apps.<br><em>Start a publishing flow.</em></h2>
-    <p class="section-subtitle">
-      SocialFlow brings caption, image, schedule, and publish into one place — so posting feels intentional, not rushed.
-    </p>
-  </div>
-  <div class="promise-grid">
-    {% for item in promises %}
-    <article class="promise-item reveal" style="--d: {{ forloop.counter0 }}">
-      <h3>{{ item.title }}</h3>
-      <p>{{ item.desc }}</p>
-    </article>
-    {% endfor %}
-  </div>
-</section>
-
-{# 3 — How it works #}
-<section id="how" class="home-section how-section">
-  <div class="section-header how-header reveal">
-    <p class="section-kicker">How it works</p>
-    <h2 class="section-title">Three steps.<br><em>Then you’re live.</em></h2>
-    <p class="section-subtitle">From blank page to published post — without jumping between apps.</p>
-  </div>
-
-  <ol class="how-story">
-    <li class="how-chapter reveal">
-      <div class="how-chapter-copy">
-        <span class="how-giant" aria-hidden="true">01</span>
-        <h3>Connect your accounts</h3>
-        <p>Link Facebook and Instagram once. Publish from either — or both.</p>
-      </div>
-      <div class="how-viz how-viz-connect" aria-hidden="true">
-        <span class="viz-node viz-sf">SF</span>
-        <span class="viz-beam"></span>
-        <span class="viz-node viz-fb">f</span>
-        <span class="viz-beam"></span>
-        <span class="viz-node viz-ig">ig</span>
-      </div>
-    </li>
-    <li class="how-chapter how-chapter-flip reveal" style="--d: 1">
-      <div class="how-chapter-copy">
-        <span class="how-giant" aria-hidden="true">02</span>
-        <h3>Create your post</h3>
-        <p>Write the caption, generate an AI image, and pick where it goes.</p>
-      </div>
-      <div class="how-viz how-viz-create" aria-hidden="true">
-        <div class="viz-canvas">
-          <span class="viz-swatch a"></span>
-          <span class="viz-swatch b"></span>
-          <span class="viz-swatch c"></span>
-        </div>
-        <div class="viz-caption"><span></span><span></span></div>
-      </div>
-    </li>
-    <li class="how-chapter reveal" style="--d: 2">
-      <div class="how-chapter-copy">
-        <span class="how-giant" aria-hidden="true">03</span>
-        <h3>Publish or schedule</h3>
-        <p>Go live now, or set a time and let SocialFlow post for you.</p>
-      </div>
-      <div class="how-viz how-viz-schedule" aria-hidden="true">
-        <div class="viz-clock"><span class="viz-hand"></span></div>
-        <div class="viz-pulse"><span>Now</span><span>Later</span></div>
-      </div>
-    </li>
-  </ol>
-</section>
-
-{# 4 — Platforms #}
-<section id="platforms" class="platforms-band">
-  <div class="home-section platforms-inner">
+<section id="promise" class="shell shell-mist">
+  <div class="home-section promise-section">
     <div class="section-header reveal">
-      <p class="section-kicker">Platforms</p>
-      <h2 class="section-title">One workspace.<br><em>Two networks.</em></h2>
-      <p class="section-subtitle">Connect once, then choose Facebook, Instagram, or both for every post.</p>
+      <p class="section-kicker">The idea</p>
+      <h2 class="section-title">Stop juggling apps.<br><em>Start a publishing flow.</em></h2>
+      <p class="section-subtitle">
+        SocialFlow brings caption, image, schedule, and publish into one place — so posting feels intentional, not rushed.
+      </p>
     </div>
-    <div class="platform-pair">
-      <article class="platform-panel reveal">
-        <span class="platform-badge plat-fb-bg" aria-hidden="true">f</span>
-        <h3>Facebook Page</h3>
-        <p>Publish to your Page with the same caption and creative you already prepared.</p>
+    <div class="promise-grid">
+      {% for item in promises %}
+      <article class="promise-item reveal" style="--d: {{ forloop.counter0 }}">
+        <span class="promise-idx" aria-hidden="true">0{{ forloop.counter }}</span>
+        <h3>{{ item.title }}</h3>
+        <p>{{ item.desc }}</p>
       </article>
-      <article class="platform-panel reveal" style="--d: 1">
-        <span class="platform-badge plat-ig-bg" aria-hidden="true">ig</span>
-        <h3>Instagram</h3>
-        <p>Post to Instagram from SocialFlow — no separate upload hop required.</p>
-      </article>
+      {% endfor %}
     </div>
   </div>
 </section>
 
-{# 5 — Features #}
-<section id="features" class="home-section features-section">
-  <div class="section-header reveal">
-    <p class="section-kicker">Features</p>
-    <h2 class="section-title">Everything you need<br><em>to stay consistent</em></h2>
-    <p class="section-subtitle">A focused toolkit for creators and teams who publish on purpose.</p>
+<figure class="media-frame reveal">
+  <div class="media-frame-shot">
+    <img src="{% static 'img/landing/break-desk.png' %}" alt="" width="1600" height="900" loading="lazy">
   </div>
-  <div class="features-grid">
-    {% for feature in features %}
-    <article class="feature-tile reveal" style="--d: {{ forloop.counter0 }}">
-      <span class="feature-mark" aria-hidden="true">{{ feature.icon }}</span>
-      <h3 class="feature-title">{{ feature.title }}</h3>
-      <p class="feature-desc">{{ feature.desc }}</p>
-    </article>
-    {% endfor %}
+  <figcaption>
+    <span>Workspace</span>
+    <span>Plan the post. Keep the calm.</span>
+  </figcaption>
+</figure>
+
+<section id="how" class="shell shell-plain">
+  <div class="home-section how-section">
+    <div class="section-header how-header reveal">
+      <p class="section-kicker">How it works</p>
+      <h2 class="section-title">Three steps.<br><em>Then you’re live.</em></h2>
+      <p class="section-subtitle">From blank page to published post — without jumping between apps.</p>
+    </div>
+
+    <ol class="how-story">
+      <li class="how-chapter reveal">
+        <div class="how-chapter-copy">
+          <span class="how-giant" aria-hidden="true">01</span>
+          <h3>Connect your accounts</h3>
+          <p>Link Facebook and Instagram once. Publish from either — or both.</p>
+        </div>
+        <div class="how-viz how-viz-connect" aria-hidden="true">
+          <span class="viz-node viz-sf">SF</span>
+          <span class="viz-beam"></span>
+          <span class="viz-node viz-fb">f</span>
+          <span class="viz-beam"></span>
+          <span class="viz-node viz-ig">ig</span>
+        </div>
+      </li>
+      <li class="how-chapter how-chapter-flip reveal" style="--d: 1">
+        <div class="how-chapter-copy">
+          <span class="how-giant" aria-hidden="true">02</span>
+          <h3>Create your post</h3>
+          <p>Write the caption, generate an AI image, and pick where it goes.</p>
+        </div>
+        <div class="how-viz how-viz-create" aria-hidden="true">
+          <div class="viz-canvas">
+            <span class="viz-swatch a"></span>
+            <span class="viz-swatch b"></span>
+            <span class="viz-swatch c"></span>
+          </div>
+          <div class="viz-caption"><span></span><span></span></div>
+        </div>
+      </li>
+      <li class="how-chapter reveal" style="--d: 2">
+        <div class="how-chapter-copy">
+          <span class="how-giant" aria-hidden="true">03</span>
+          <h3>Publish or schedule</h3>
+          <p>Go live now, or set a time and let SocialFlow post for you.</p>
+        </div>
+        <div class="how-viz how-viz-schedule" aria-hidden="true">
+          <div class="viz-clock"><span class="viz-hand"></span></div>
+          <div class="viz-pulse"><span>Now</span><span>Later</span></div>
+        </div>
+      </li>
+    </ol>
   </div>
 </section>
 
-{# 6 — AI images #}
-<section id="ai" class="ai-band">
+<section id="platforms" class="shell shell-inksoft">
+  <div class="home-section platforms-inner">
+    <div class="platform-split">
+      <figure class="platform-shot reveal">
+        <img src="{% static 'img/landing/break-phones.png' %}" alt="" width="1600" height="900" loading="lazy">
+        <figcaption>Reach both networks from one place</figcaption>
+      </figure>
+      <div class="platform-copy">
+        <div class="section-header reveal">
+          <p class="section-kicker">Platforms</p>
+          <h2 class="section-title">One workspace.<br><em>Two networks.</em></h2>
+          <p class="section-subtitle">Connect once, then choose Facebook, Instagram, or both for every post.</p>
+        </div>
+        <div class="platform-pair">
+          <article class="platform-panel reveal">
+            <span class="platform-badge plat-fb-bg" aria-hidden="true">f</span>
+            <h3>Facebook Page</h3>
+            <p>Publish to your Page with the same caption and creative you already prepared.</p>
+          </article>
+          <article class="platform-panel reveal" style="--d: 1">
+            <span class="platform-badge plat-ig-bg" aria-hidden="true">ig</span>
+            <h3>Instagram</h3>
+            <p>Post to Instagram from SocialFlow — no separate upload hop required.</p>
+          </article>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features" class="shell shell-plain">
+  <div class="home-section features-section">
+    <div class="section-header reveal">
+      <p class="section-kicker">Features</p>
+      <h2 class="section-title">Everything you need<br><em>to stay consistent</em></h2>
+      <p class="section-subtitle">A focused toolkit for creators and teams who publish on purpose.</p>
+    </div>
+    <div class="features-mosaic">
+      {% for feature in features %}
+      <article class="feature-tile reveal {% if forloop.counter <= 2 %}feature-tile-lg{% endif %}" style="--d: {{ forloop.counter0 }}">
+        <span class="feature-mark" aria-hidden="true">{{ feature.icon }}</span>
+        <h3 class="feature-title">{{ feature.title }}</h3>
+        <p class="feature-desc">{{ feature.desc }}</p>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section id="ai" class="shell shell-sand">
   <div class="home-section ai-inner">
     <div class="ai-layout">
       <div class="ai-copy reveal">
@@ -194,48 +213,50 @@
           <li>Save drafts when you’re not ready yet</li>
         </ul>
       </div>
-      <div class="ai-visual reveal" style="--d: 1" aria-hidden="true">
-        <div class="ai-option is-pick"><span>A</span></div>
-        <div class="ai-option"><span>B</span></div>
-        <div class="ai-option"><span>C</span></div>
-      </div>
+      <figure class="ai-photo reveal" style="--d: 1">
+        <img src="{% static 'img/landing/break-ai.png' %}" alt="" width="1600" height="900" loading="lazy">
+        <figcaption>Pick the option that matches the post</figcaption>
+      </figure>
     </div>
   </div>
 </section>
 
-{# 7 — Pipeline #}
-<section id="pipeline" class="home-section pipeline-section">
-  <div class="section-header reveal">
-    <p class="section-kicker">Your pipeline</p>
-    <h2 class="section-title">See every post<br><em>at a glance</em></h2>
-    <p class="section-subtitle">Drafts, scheduled, published, and failed — tracked in one calm dashboard.</p>
-  </div>
-  <div class="pipeline-track">
-    {% for stage in pipeline %}
-    <article class="pipeline-stage reveal" style="--d: {{ forloop.counter0 }}">
-      <span class="pipeline-num">0{{ forloop.counter }}</span>
-      <h3>{{ stage.title }}</h3>
-      <p>{{ stage.desc }}</p>
-    </article>
-    {% endfor %}
-  </div>
-</section>
-
-{# 8 — Who it’s for + CTA #}
-<section id="who" class="who-band">
-  <div class="home-section who-inner">
+<section id="pipeline" class="shell shell-mist">
+  <div class="home-section pipeline-section">
     <div class="section-header reveal">
-      <p class="section-kicker">Who it’s for</p>
-      <h2 class="section-title">Built for people<br><em>who actually post</em></h2>
-      <p class="section-subtitle">Whether you run a brand page or create for yourself, SocialFlow keeps the publishing path short.</p>
+      <p class="section-kicker">Your pipeline</p>
+      <h2 class="section-title">See every post<br><em>at a glance</em></h2>
+      <p class="section-subtitle">Drafts, scheduled, published, and failed — tracked in one calm dashboard.</p>
     </div>
-    <div class="who-grid">
-      {% for persona in personas %}
-      <article class="who-item reveal" style="--d: {{ forloop.counter0 }}">
-        <h3>{{ persona.title }}</h3>
-        <p>{{ persona.desc }}</p>
+    <div class="pipeline-track">
+      {% for stage in pipeline %}
+      <article class="pipeline-stage reveal stage-{{ forloop.counter }}" style="--d: {{ forloop.counter0 }}">
+        <span class="pipeline-num">0{{ forloop.counter }}</span>
+        <h3>{{ stage.title }}</h3>
+        <p>{{ stage.desc }}</p>
       </article>
       {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section id="who" class="shell shell-plain">
+  <div class="home-section who-inner">
+    <div class="who-layout">
+      <div class="section-header reveal">
+        <p class="section-kicker">Who it’s for</p>
+        <h2 class="section-title">Built for people<br><em>who actually post</em></h2>
+        <p class="section-subtitle">Whether you run a brand page or create for yourself, SocialFlow keeps the publishing path short.</p>
+      </div>
+      <div class="who-grid">
+        {% for persona in personas %}
+        <article class="who-item reveal" style="--d: {{ forloop.counter0 }}">
+          <span class="who-idx" aria-hidden="true">0{{ forloop.counter }}</span>
+          <h3>{{ persona.title }}</h3>
+          <p>{{ persona.desc }}</p>
+        </article>
+        {% endfor %}
+      </div>
     </div>
   </div>
 </section>
@@ -290,7 +311,7 @@
       entry.target.classList.add('is-in');
       io.unobserve(entry.target);
     });
-  }, { threshold: 0.14, rootMargin: '0px 0px -6% 0px' });
+  }, { threshold: 0.12, rootMargin: '0px 0px -5% 0px' });
   nodes.forEach(function (el) { io.observe(el); });
 })();
 </script>
