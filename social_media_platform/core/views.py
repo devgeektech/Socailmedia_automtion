@@ -13,33 +13,33 @@ def home_view(request):
     features = [
         {
             'icon': '◷',
-            'title': 'Smart Scheduling',
-            'desc': 'Plan posts days or weeks ahead. Pick the perfect date and time for maximum engagement.',
+            'title': 'Smart scheduling',
+            'desc': 'Plan days or weeks ahead. Set the time once — SocialFlow posts when you meant it to.',
         },
         {
             'icon': '◈',
-            'title': 'Multi-Platform',
-            'desc': 'Publish to Facebook and Instagram from one dashboard — no tab switching required.',
+            'title': 'Facebook & Instagram',
+            'desc': 'Connect both accounts and publish from one place. No more tab hopping.',
         },
         {
             'icon': '▣',
-            'title': 'Rich Media Posts',
-            'desc': 'Upload images and videos, write captions, and preview exactly how posts will look.',
+            'title': 'AI image options',
+            'desc': 'Describe what you want, pick from three options, and lock in the look that fits.',
         },
         {
             'icon': '◔',
-            'title': 'Post Analytics',
-            'desc': 'Track scheduled, published, and failed posts with a clean overview of your content pipeline.',
+            'title': 'Clear pipeline',
+            'desc': 'Drafts, scheduled, published, and failed — see everything in one dashboard.',
         },
         {
             'icon': '◌',
-            'title': 'Smart Notifications',
-            'desc': 'Get alerted when posts go live, fail to publish, or when your subscription is expiring.',
+            'title': 'Save & resume',
+            'desc': 'Park a draft, come back later, and finish when inspiration returns.',
         },
         {
             'icon': '⚡',
-            'title': 'Instant Publishing',
-            'desc': 'Need to post now? Skip the schedule and publish immediately with one click.',
+            'title': 'Instant publish',
+            'desc': 'When the moment is now, skip the schedule and go live in one click.',
         },
     ]
 

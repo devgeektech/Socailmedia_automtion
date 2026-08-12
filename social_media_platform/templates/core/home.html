@@ -1,19 +1,20 @@
 {% extends 'base.html' %}
 {% load static %}
-{% block title %}SocialFlow — Schedule & Publish Smarter{% endblock %}
+{% block title %}SocialFlow — Schedule once. Publish everywhere.{% endblock %}
 {% block body_class %}home-page{% endblock %}
 {% block wrapper_class %}home-wrapper{% endblock %}
 
 {% block navbar %}
-<nav class="navbar glass-card">
+<nav class="navbar home-nav">
   <a href="{% url 'core:home' %}" class="logo">
     <div class="logo-icon">◈</div>
     <span class="logo-text">SocialFlow</span>
   </a>
   <div class="nav-links">
+    <a href="#how" class="nav-link">How it works</a>
     <a href="#features" class="nav-link">Features</a>
-    <a href="{% url 'accounts:login' %}" class="nav-link">Login</a>
-    <a href="{% url 'accounts:signup' %}" class="btn-primary nav-btn">Get Started</a>
+    <a href="{% url 'accounts:login' %}" class="nav-link">Sign in</a>
+    <a href="{% url 'accounts:signup' %}" class="btn-primary nav-btn">Start free</a>
   </div>
 </nav>
 {% endblock %}
@@ -21,51 +22,160 @@
 {% block content %}
 <section class="hero-bleed">
   <div class="hero-visual" aria-hidden="true">
-    <div class="hero-flow">
-      <div class="flow-bar"></div>
-      <div class="flow-row">
-        <div class="flow-chip"></div>
-        <div class="flow-chip"></div>
-        <div class="flow-chip"></div>
+    <div class="hero-aurora hero-aurora-a"></div>
+    <div class="hero-aurora hero-aurora-b"></div>
+    <div class="hero-grid"></div>
+    <div class="hero-orbit">
+      <span class="orbit-ring orbit-ring-1"></span>
+      <span class="orbit-ring orbit-ring-2"></span>
+      <span class="orbit-ring orbit-ring-3"></span>
+    </div>
+    <div class="hero-stream">
+      <div class="stream-track">
+        <div class="stream-post stream-post-1">
+          <div class="stream-thumb"></div>
+          <div class="stream-lines">
+            <span></span><span></span>
+          </div>
+          <div class="stream-platforms">
+            <i class="plat-fb">f</i>
+            <i class="plat-ig">ig</i>
+          </div>
+        </div>
+        <div class="stream-post stream-post-2">
+          <div class="stream-thumb"></div>
+          <div class="stream-lines">
+            <span></span><span></span>
+          </div>
+          <div class="stream-platforms">
+            <i class="plat-fb">f</i>
+          </div>
+        </div>
+        <div class="stream-post stream-post-3">
+          <div class="stream-thumb"></div>
+          <div class="stream-lines">
+            <span></span><span></span>
+          </div>
+          <div class="stream-platforms">
+            <i class="plat-ig">ig</i>
+          </div>
+        </div>
       </div>
-      <div class="flow-panel"></div>
     </div>
   </div>
+
   <div class="hero-copy">
     <h1 class="hero-brand">Social<span>Flow</span></h1>
     <p class="hero-line">Schedule once. Publish everywhere.</p>
     <p class="hero-sub">
-      Plan and ship posts to Facebook &amp; Instagram from one calm workspace — weeks ahead, or right now.
+      Create, schedule, and publish to Facebook &amp; Instagram from one calm workspace.
     </p>
     <div class="hero-actions">
-      <a href="{% url 'accounts:signup' %}" class="btn-primary">Start Free Trial</a>
-      <a href="{% url 'accounts:login' %}" class="btn-secondary">Sign In</a>
+      <a href="{% url 'accounts:signup' %}" class="btn-primary">Start free trial</a>
+      <a href="{% url 'accounts:login' %}" class="btn-secondary">Sign in</a>
     </div>
   </div>
 </section>
 
-<section id="features" class="home-section">
-  <div class="section-header">
-    <h2 class="section-title">Built for creators who ship on time</h2>
-    <p class="section-subtitle">Everything you need to plan, publish, and stay on top of your social presence — without the chaos.</p>
+<section id="how" class="home-section how-section">
+  <div class="section-header how-header reveal">
+    <p class="section-kicker">How it works</p>
+    <h2 class="section-title">Three steps.<br><em>Then you’re live.</em></h2>
+    <p class="section-subtitle">From blank page to published post — without jumping between apps.</p>
   </div>
-  <div class="features-grid">
-    {% for feature in features %}
-    <article class="feature-item">
-      <div class="feature-icon">{{ feature.icon }}</div>
-      <h3 class="feature-title">{{ feature.title }}</h3>
-      <p class="feature-desc">{{ feature.desc }}</p>
-    </article>
-    {% endfor %}
+
+  <ol class="how-story">
+    <li class="how-chapter reveal">
+      <div class="how-chapter-copy">
+        <span class="how-giant" aria-hidden="true">01</span>
+        <h3>Connect your accounts</h3>
+        <p>Link Facebook and Instagram once. Publish from either — or both.</p>
+      </div>
+      <div class="how-viz how-viz-connect" aria-hidden="true">
+        <span class="viz-node viz-sf">SF</span>
+        <span class="viz-beam"></span>
+        <span class="viz-node viz-fb">f</span>
+        <span class="viz-beam"></span>
+        <span class="viz-node viz-ig">ig</span>
+      </div>
+    </li>
+
+    <li class="how-chapter how-chapter-flip reveal" style="--d: 1">
+      <div class="how-chapter-copy">
+        <span class="how-giant" aria-hidden="true">02</span>
+        <h3>Create your post</h3>
+        <p>Write the caption, generate an AI image, and pick where it goes.</p>
+      </div>
+      <div class="how-viz how-viz-create" aria-hidden="true">
+        <div class="viz-canvas">
+          <span class="viz-swatch a"></span>
+          <span class="viz-swatch b"></span>
+          <span class="viz-swatch c"></span>
+        </div>
+        <div class="viz-caption">
+          <span></span><span></span>
+        </div>
+      </div>
+    </li>
+
+    <li class="how-chapter reveal" style="--d: 2">
+      <div class="how-chapter-copy">
+        <span class="how-giant" aria-hidden="true">03</span>
+        <h3>Publish or schedule</h3>
+        <p>Go live now, or set a time and let SocialFlow post for you.</p>
+      </div>
+      <div class="how-viz how-viz-schedule" aria-hidden="true">
+        <div class="viz-clock">
+          <span class="viz-hand"></span>
+        </div>
+        <div class="viz-pulse">
+          <span>Now</span>
+          <span>Later</span>
+        </div>
+      </div>
+    </li>
+  </ol>
+</section>
+
+<section id="features" class="features-band">
+  <div class="features-band-inner">
+    <div class="section-header features-header reveal">
+      <p class="section-kicker">Features</p>
+      <h2 class="section-title">Everything you need<br><em>to stay consistent</em></h2>
+      <p class="section-subtitle">A focused toolkit for creators and teams who publish on purpose.</p>
+    </div>
+
+    <div class="feature-river">
+      {% for feature in features %}
+      <article class="feature-drop reveal {% cycle 'drop-left' 'drop-right' %}" style="--d: {{ forloop.counter0 }}">
+        <span class="feature-wash" aria-hidden="true">0{{ forloop.counter }}</span>
+        <div class="feature-drop-inner">
+          <span class="feature-mark" aria-hidden="true">{{ feature.icon }}</span>
+          <h3 class="feature-title">{{ feature.title }}</h3>
+          <p class="feature-desc">{{ feature.desc }}</p>
+        </div>
+      </article>
+      {% endfor %}
+      <div class="feature-spine" aria-hidden="true"></div>
+    </div>
   </div>
 </section>
 
 <section class="cta-band">
-  <h2 class="cta-title">Ready when you are</h2>
-  <p class="cta-subtitle">Create an account, pick a plan, then unlock your dashboard. Free trial — no card required.</p>
-  <div class="hero-actions">
-    <a href="{% url 'accounts:signup' %}" class="btn-primary">Create Free Account</a>
-    <a href="{% url 'accounts:login' %}" class="btn-secondary">Sign In</a>
+  <div class="cta-glow" aria-hidden="true"></div>
+  <div class="cta-mesh" aria-hidden="true"></div>
+  <div class="cta-split reveal">
+    <div class="cta-display">
+      <p class="cta-kicker">Ready when you are</p>
+      <h2 class="cta-title">Your next<br>post starts<br><em>here</em></h2>
+    </div>
+    <div class="cta-side">
+      <p class="cta-subtitle">Free trial. No card required. Connect accounts and publish in minutes.</p>
+      <div class="hero-actions">
+        <a href="{% url 'accounts:signup' %}" class="btn-primary">Create free account</a>
+        <a href="{% url 'accounts:login' %}" class="btn-secondary">Sign in</a>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -78,8 +188,31 @@
     <p class="footer-copy">&copy; 2026 SocialFlow. Schedule smarter, publish faster.</p>
     <div class="footer-links">
       <a href="{% url 'accounts:login' %}" class="nav-link">Login</a>
-      <a href="{% url 'accounts:signup' %}" class="nav-link">Sign Up</a>
+      <a href="{% url 'accounts:signup' %}" class="nav-link">Sign up</a>
+      <a href="{% url 'core:privacy_policy' %}" class="nav-link">Privacy</a>
+      <a href="{% url 'core:terms_of_service' %}" class="nav-link">Terms</a>
     </div>
   </div>
 </footer>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var nodes = document.querySelectorAll('.home-page .reveal');
+  if (!nodes.length) return;
+  if (!('IntersectionObserver' in window)) {
+    nodes.forEach(function (el) { el.classList.add('is-in'); });
+    return;
+  }
+  var io = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add('is-in');
+      io.unobserve(entry.target);
+    });
+  }, { threshold: 0.14, rootMargin: '0px 0px -6% 0px' });
+  nodes.forEach(function (el) { io.observe(el); });
+})();
+</script>
 {% endblock %}
