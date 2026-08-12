@@ -228,7 +228,7 @@
   var regenerate = document.getElementById('id_regenerate_image');
   var picker = document.getElementById('ai-image-picker');
   var optionsEl = document.getElementById('ai-image-options');
-  var suppressDraftSave = false;
+  var formLocked = false;
 
   var previewDesc = document.getElementById('preview-description');
   var previewCaption = document.getElementById('preview-caption');
@@ -282,28 +282,34 @@
     };
   }
 
-  function saveDraft() {
-    if (suppressDraftSave) return;
+  // Temporary browser draft — only when leaving to connect Facebook/Instagram
+  function saveConnectDraft() {
     try {
       var draft = buildDraft();
       if (!draftHasContent(draft)) {
         sessionStorage.removeItem(DRAFT_KEY);
+        sessionStorage.removeItem(DRAFT_RETURN_KEY);
         return;
       }
       sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      sessionStorage.setItem(DRAFT_RETURN_KEY, '1');
     } catch (err) { /* ignore quota / private mode */ }
   }
 
-  function restoreDraft() {
+  function restoreConnectDraft() {
     try {
-      var raw = sessionStorage.getItem(DRAFT_KEY);
       var fromConnect = sessionStorage.getItem(DRAFT_RETURN_KEY) === '1';
-      if (fromConnect) sessionStorage.removeItem(DRAFT_RETURN_KEY);
-      if (!raw) return;
+      if (!fromConnect) {
+        clearDraft();
+        return false;
+      }
+      sessionStorage.removeItem(DRAFT_RETURN_KEY);
+      var raw = sessionStorage.getItem(DRAFT_KEY);
+      if (!raw) return false;
       var draft = JSON.parse(raw);
       if (!draftHasContent(draft)) {
         sessionStorage.removeItem(DRAFT_KEY);
-        return;
+        return false;
       }
       if (description && !description.value && draft.description) description.value = draft.description;
       if (caption && !caption.value && draft.caption) caption.value = draft.caption;
@@ -327,12 +333,13 @@
       } else if (draft.preview_image_url) {
         showImage(draft.preview_image_url);
       }
-      if (aiStatus) {
-        aiStatus.textContent = fromConnect
-          ? 'Draft restored after connecting accounts.'
-          : 'Draft restored.';
-      }
-    } catch (err) { /* ignore */ }
+      if (aiStatus) aiStatus.textContent = 'Your post was restored after connecting accounts.';
+      sessionStorage.removeItem(DRAFT_KEY);
+      return true;
+    } catch (err) {
+      clearDraft();
+      return false;
+    }
   }
 
   function clearDraft() {
@@ -343,10 +350,20 @@
   }
 
   function setGenerating(isLoading) {
+    if (formLocked) return;
     if (generateBtn) generateBtn.disabled = !!isLoading;
     if (genBtnLabel) genBtnLabel.hidden = !!isLoading;
     if (genBtnLoading) genBtnLoading.hidden = !isLoading;
     if (generateBtn) generateBtn.classList.toggle('is-loading', !!isLoading);
+  }
+
+  function lockForm(mode) {
+    formLocked = true;
+    if (mode === 'draft') {
+      setSavingDraft(true);
+    } else {
+      setPublishing(true);
+    }
   }
 
   function setPublishing(isLoading) {
