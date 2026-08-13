@@ -118,6 +118,43 @@ def attach_single_image_asset(post: Post, asset: MediaAsset) -> None:
     post.save(update_fields=['image', 'video', 'media_type', 'updated_at'])
 
 
+def existing_image_assets_for_post(post: Post, *, promote_cover: bool = True) -> list[MediaAsset]:
+    """Return image assets already on the post (PostMedia, or cover image as a library asset)."""
+    assets = []
+    seen = set()
+    for item in post.ordered_media():
+        asset = item.asset
+        if not asset or asset.kind != MediaAsset.KIND_IMAGE or not asset.file:
+            continue
+        if asset.pk in seen:
+            continue
+        seen.add(asset.pk)
+        assets.append(asset)
+    if assets:
+        return assets
+
+    if not promote_cover or not post.image:
+        return []
+
+    # Legacy single-image posts may only have Post.image — keep it as a library asset
+    name = Path(post.image.name).name or 'existing.jpg'
+    asset = MediaAsset(
+        user=post.user,
+        kind=MediaAsset.KIND_IMAGE,
+        source=MediaAsset.SOURCE_UPLOAD,
+        original_name=name[:255],
+    )
+    post.image.open('rb')
+    try:
+        asset.file.save(name, File(post.image), save=True)
+    finally:
+        try:
+            post.image.close()
+        except Exception:
+            pass
+    return [asset]
+
+
 def attach_from_temp_paths(post: Post, temp_paths: list[Path], *, user, prompt='') -> None:
     """Turn AI temp files into library assets and attach as single/carousel."""
     assets = []

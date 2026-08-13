@@ -552,6 +552,16 @@
       items.push(item);
     }
 
+    // Keep current draft/post photos; new uploads/picks are added after them
+    existingPreviewItems.forEach(function (item) {
+      if (!item || !item.url) return;
+      pushItem({
+        source: 'existing',
+        id: item.asset_id ? String(item.asset_id) : (item.path || ''),
+        url: item.url,
+      });
+    });
+
     if (galleryThumbs) {
       galleryThumbs.querySelectorAll('.gallery-upload-thumb').forEach(function (wrap, i) {
         var img = wrap.querySelector('img');
@@ -569,27 +579,6 @@
       if (item.url) pushItem({ source: 'ai', id: item.path || '', url: item.url });
     });
 
-    if (!items.length) {
-      existingPreviewItems.forEach(function (item) {
-        if (!item || !item.url) return;
-        pushItem({
-          source: 'existing',
-          id: item.asset_id ? String(item.asset_id) : (item.path || ''),
-          url: item.url,
-        });
-      });
-    } else {
-      // Fill selected library IDs that have no pick button in the DOM
-      (selectedLibrary || []).forEach(function (id) {
-        if (!id || items.some(function (x) { return String(x.id) === String(id); })) return;
-        var match = existingPreviewItems.find(function (item) {
-          return item && String(item.asset_id) === String(id);
-        });
-        if (match && match.url) {
-          pushItem({ source: 'existing', id: String(id), url: match.url });
-        }
-      });
-    }
     return items;
   }
 

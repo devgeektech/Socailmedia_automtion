@@ -80,6 +80,7 @@ def _apply_media_from_form(request, post, form):
         attach_carousel_from_assets,
         attach_single_image_asset,
         clear_post_media,
+        existing_image_assets_for_post,
         kind_from_name,
         merge_image_assets,
         parse_asset_ids,
@@ -95,6 +96,7 @@ def _apply_media_from_form(request, post, form):
         a for a in parse_asset_ids(library_ids, request.user)
         if a.kind == MediaAsset.KIND_IMAGE
     ]
+    replace_existing = (request.POST.get('replace_existing_media') or '').strip() == '1'
 
     uploaded_assets = []
     for f in carousel_files[:10]:
@@ -119,7 +121,26 @@ def _apply_media_from_form(request, post, form):
         except Exception:
             logger.exception('Could not save AI temp into library')
 
-    combined = merge_image_assets(uploaded_assets, library_assets, ai_assets)
+    existing_assets = existing_image_assets_for_post(post, promote_cover=False)
+    existing_ids = {a.pk for a in existing_assets}
+
+    if replace_existing:
+        # Client sent the full remaining set via library / uploads / AI
+        combined = merge_image_assets(uploaded_assets, library_assets, ai_assets)
+    else:
+        new_library = [a for a in library_assets if a.pk not in existing_ids]
+        if uploaded_assets or new_library or ai_assets:
+            # Append new photos to the ones already on the draft/post
+            existing_assets = existing_image_assets_for_post(post, promote_cover=True)
+            combined = merge_image_assets(
+                existing_assets,
+                uploaded_assets,
+                library_assets,
+                ai_assets,
+            )
+        else:
+            combined = []
+
     if combined:
         if len(combined) == 1:
             attach_single_image_asset(post, combined[0])
@@ -127,7 +148,7 @@ def _apply_media_from_form(request, post, form):
             attach_carousel_from_assets(post, combined)
         return
 
-    if (request.POST.get('replace_existing_media') or '').strip() == '1':
+    if replace_existing:
         clear_post_media(post)
         if post.image:
             post.image.delete(save=False)
