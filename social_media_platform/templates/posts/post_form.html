@@ -42,50 +42,55 @@
         {% if form.caption.errors %}<p class="form-error">{{ form.caption.errors.0 }}</p>{% endif %}
       </div>
 
-      <div class="form-group photo-add-group{% if photo_source %} is-locked{% endif %}" id="photo-add-group">
+      <div class="form-group photo-add-group" id="photo-add-group">
         <label class="form-label">Photos</label>
-        <p class="platform-note photo-chooser-lead" id="photo-chooser-lead">
-          {% if photo_source == 'device' %}Adding from your device
-          {% elif photo_source == 'ai' %}Creating photos with AI
-          {% elif photo_source == 'library' %}Picking from saved photos
-          {% else %}Choose one way to add photos.{% endif %}
-        </p>
+        <p class="platform-note photo-chooser-lead" id="photo-chooser-lead">Choose one way to add photos.</p>
 
-        <div class="photo-chooser" id="photo-chooser"{% if photo_source %} hidden{% endif %}>
-          <div class="photo-chooser-grid">
-            <button type="button" class="photo-choice" id="photo-choice-device" data-source="device">
-              <span class="photo-choice-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="4" width="18" height="14" rx="2"></rect>
-                  <circle cx="8.5" cy="9.5" r="1.5"></circle>
-                  <path d="M21 15l-5-5-7 7-3-3-3 3"></path>
-                </svg>
-              </span>
+        <div class="photo-chooser" id="photo-chooser" role="radiogroup" aria-label="Photo source">
+          <label class="photo-radio{% if photo_source == 'device' %} is-selected{% endif %}">
+            <input type="radio" name="photo_source_ui" value="device" {% if photo_source == 'device' %}checked{% endif %}>
+            <span class="photo-choice-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="14" rx="2"></rect>
+                <circle cx="8.5" cy="9.5" r="1.5"></circle>
+                <path d="M21 15l-5-5-7 7-3-3-3 3"></path>
+              </svg>
+            </span>
+            <span class="photo-radio-copy">
               <strong>From your device</strong>
               <small>Phone or computer</small>
-            </button>
-            <button type="button" class="photo-choice" id="photo-choice-ai" data-source="ai">
-              <span class="photo-choice-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 3l1.2 3.6L17 8l-3.8 1.4L12 13l-1.2-3.6L7 8l3.8-1.4L12 3z"></path>
-                  <path d="M5 16l.7 2 2 .7-2 .7L5 21l-.7-2-2-.7 2-.7L5 16z"></path>
-                  <path d="M19 14l.6 1.6L21 16l-1.4.4L19 18l-.6-1.6L17 16l1.4-.4L19 14z"></path>
-                </svg>
-              </span>
+            </span>
+            <span class="photo-radio-mark" aria-hidden="true"></span>
+          </label>
+          <label class="photo-radio{% if photo_source == 'ai' %} is-selected{% endif %}">
+            <input type="radio" name="photo_source_ui" value="ai" {% if photo_source == 'ai' %}checked{% endif %}>
+            <span class="photo-choice-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3l1.2 3.6L17 8l-3.8 1.4L12 13l-1.2-3.6L7 8l3.8-1.4L12 3z"></path>
+                <path d="M5 16l.7 2 2 .7-2 .7L5 21l-.7-2-2-.7 2-.7L5 16z"></path>
+                <path d="M19 14l.6 1.6L21 16l-1.4.4L19 18l-.6-1.6L17 16l1.4-.4L19 14z"></path>
+              </svg>
+            </span>
+            <span class="photo-radio-copy">
               <strong>Create with AI</strong>
               <small>Describe what you want</small>
-            </button>
-            <button type="button" class="photo-choice" id="photo-choice-library" data-source="library"{% if not has_library_photos and not library_assets %} disabled{% endif %}>
-              <span class="photo-choice-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M4 6h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"></path>
-                  <path d="M8 6V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-1"></path>
-                </svg>
-              </span>
+            </span>
+            <span class="photo-radio-mark" aria-hidden="true"></span>
+          </label>
+          <label class="photo-radio{% if photo_source == 'library' %} is-selected{% endif %}{% if not has_library_photos and not library_assets %} is-disabled{% endif %}">
+            <input type="radio" name="photo_source_ui" value="library" {% if photo_source == 'library' %}checked{% endif %}{% if not has_library_photos and not library_assets %} disabled{% endif %}>
+            <span class="photo-choice-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 6h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"></path>
+                <path d="M8 6V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-1"></path>
+              </svg>
+            </span>
+            <span class="photo-radio-copy">
               <strong>Saved photos</strong>
               <small>{% if has_library_photos or library_assets %}Pick from earlier uploads{% else %}None saved yet{% endif %}</small>
-            </button>
-          </div>
+            </span>
+            <span class="photo-radio-mark" aria-hidden="true"></span>
+          </label>
         </div>
 
         <div class="photo-panel" id="photo-panel-device"{% if photo_source != 'device' %} hidden{% endif %}>
@@ -1500,62 +1505,107 @@
   }
 
   (function bindPhotoChooser() {
-    var group = document.getElementById('photo-add-group');
-    var chooser = document.getElementById('photo-chooser');
     var lead = document.getElementById('photo-chooser-lead');
     var sourceField = document.getElementById('id_photo_source');
+    var replaceField = document.getElementById('id_replace_existing_media');
     var panels = {
       device: document.getElementById('photo-panel-device'),
       ai: document.getElementById('photo-panel-ai'),
       library: document.getElementById('photo-panel-library')
     };
-    var leads = {
-      start: 'Choose one way to add photos.',
-      device: 'Adding from your device',
-      ai: 'Creating photos with AI',
-      library: 'Picking from saved photos'
-    };
-    var locked = false;
+    var radios = document.querySelectorAll('input[name="photo_source_ui"]');
+    var activeSource = sourceField ? String(sourceField.value || '').trim() : '';
 
-    function showPanel(source, persist) {
-      if (!source || !panels[source]) return;
-      locked = true;
-      if (sourceField) sourceField.value = source;
-      if (group) group.classList.add('is-locked');
-      if (chooser) {
-        chooser.hidden = true;
-        chooser.setAttribute('hidden', 'hidden');
-      }
-      document.querySelectorAll('.photo-choice').forEach(function (btn) {
-        btn.disabled = true;
+    function syncRadioStyles(source) {
+      document.querySelectorAll('.photo-radio').forEach(function (label) {
+        var input = label.querySelector('input[type="radio"]');
+        var value = input ? input.value : '';
+        label.classList.toggle('is-selected', value === source && !!(input && input.checked));
       });
+    }
+
+    function clearDevicePhotos() {
+      galleryPreviewItems = [];
+      if (galleryInput) galleryInput.value = '';
+      if (galleryThumbs) {
+        galleryThumbs.innerHTML = '';
+        galleryThumbs.hidden = true;
+      }
+    }
+
+    function clearAiPhotos() {
+      selectedAi = [];
+      syncGeneratedPaths();
+      if (optionsEl) optionsEl.innerHTML = '';
+      closeAiPicker();
+      if (regenerate) regenerate.checked = false;
+      if (aiStatus) aiStatus.textContent = '';
+    }
+
+    function clearLibraryPhotos() {
+      selectedLibrary = [];
+      selectedLibraryMeta = {};
+      syncLibraryHidden();
+      renderSelectedLibraryThumbs();
+      if (pickerGrid) pickerGrid.querySelectorAll('.library-pick.is-selected').forEach(function (btn) {
+        btn.classList.remove('is-selected');
+      });
+    }
+
+    function clearExistingPostPhotos() {
+      if (!existingPreviewItems.length) return;
+      existingPreviewItems = [];
+      if (replaceField) replaceField.value = '1';
+    }
+
+    function keepOnlySource(source) {
+      if (source !== 'device') clearDevicePhotos();
+      if (source !== 'ai') clearAiPhotos();
+      if (source !== 'library') clearLibraryPhotos();
+      // Switching method replaces whatever was already on the draft/post
+      clearExistingPostPhotos();
+      rebuildPreviewFromSelections();
+    }
+
+    function showPanel(source, openAction) {
+      if (!source || !panels[source]) return;
+      var previous = activeSource;
+      activeSource = source;
+      if (sourceField) sourceField.value = source;
       Object.keys(panels).forEach(function (key) {
         if (!panels[key]) return;
         panels[key].hidden = key !== source;
       });
-      if (lead) lead.textContent = leads[source] || leads.start;
+      syncRadioStyles(source);
+      if (lead) lead.textContent = 'Choose one way to add photos.';
+      // Clear photos from other methods when the user picks a source
+      if (openAction && previous !== source) keepOnlySource(source);
+      if (!openAction) return;
+      if (source === 'device' && galleryInput) {
+        setTimeout(function () { galleryInput.click(); }, 50);
+      }
+      if (source === 'library') openMediaPicker();
+      if (source === 'ai' && imagePrompt) {
+        setTimeout(function () { imagePrompt.focus(); }, 50);
+      }
     }
 
-    document.querySelectorAll('.photo-choice').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        if (locked || btn.disabled) return;
-        var source = btn.getAttribute('data-source') || '';
-        showPanel(source, true);
-        if (source === 'device' && galleryInput) {
-          setTimeout(function () { galleryInput.click(); }, 50);
-        }
-        if (source === 'library') openMediaPicker();
-        if (source === 'ai' && imagePrompt) {
-          setTimeout(function () { imagePrompt.focus(); }, 50);
-        }
+    radios.forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        if (!radio.checked || radio.disabled) return;
+        showPanel(radio.value, true);
       });
     });
 
     var initial = sourceField ? String(sourceField.value || '').trim() : '';
     if (initial === 'device' || initial === 'ai' || initial === 'library') {
+      activeSource = initial;
       showPanel(initial, false);
     } else if (document.querySelector('#photo-panel-ai .form-error')) {
-      showPanel('ai', true);
+      var aiRadio = document.querySelector('input[name="photo_source_ui"][value="ai"]');
+      if (aiRadio) aiRadio.checked = true;
+      activeSource = 'ai';
+      showPanel('ai', false);
     }
   })();
   if (pickerModal) {
