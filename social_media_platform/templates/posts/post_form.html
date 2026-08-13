@@ -24,6 +24,7 @@
       {{ form.library_asset_ids }}
       <input type="hidden" name="save_draft" id="id_save_draft" value="">
       <input type="hidden" name="replace_existing_media" id="id_replace_existing_media" value="">
+      <input type="hidden" name="photo_source" id="id_photo_source" value="{{ photo_source|default:'' }}">
 
       {% if form.non_field_errors %}
       <p class="form-error">{{ form.non_field_errors.0 }}</p>
@@ -41,11 +42,16 @@
         {% if form.caption.errors %}<p class="form-error">{{ form.caption.errors.0 }}</p>{% endif %}
       </div>
 
-      <div class="form-group photo-add-group">
+      <div class="form-group photo-add-group{% if photo_source %} is-locked{% endif %}" id="photo-add-group">
         <label class="form-label">Photos</label>
-        <p class="platform-note photo-chooser-lead" id="photo-chooser-lead">Choose one way to add photos. You can add more after.</p>
+        <p class="platform-note photo-chooser-lead" id="photo-chooser-lead">
+          {% if photo_source == 'device' %}Adding from your device
+          {% elif photo_source == 'ai' %}Creating photos with AI
+          {% elif photo_source == 'library' %}Picking from saved photos
+          {% else %}Choose one way to add photos.{% endif %}
+        </p>
 
-        <div class="photo-chooser" id="photo-chooser">
+        <div class="photo-chooser" id="photo-chooser"{% if photo_source %} hidden{% endif %}>
           <div class="photo-chooser-grid">
             <button type="button" class="photo-choice" id="photo-choice-device" data-source="device">
               <span class="photo-choice-icon" aria-hidden="true">
@@ -82,19 +88,13 @@
           </div>
         </div>
 
-        <div class="photo-panel" id="photo-panel-device" hidden>
-          <div class="photo-panel-bar">
-            <p>Pick one or more photos from your phone or computer.</p>
-            <button type="button" class="photo-change-source">Change</button>
-          </div>
+        <div class="photo-panel" id="photo-panel-device"{% if photo_source != 'device' %} hidden{% endif %}>
+          <p class="platform-note" style="margin-bottom:0.75rem;">Pick one or more photos from your phone or computer.</p>
           <button type="button" class="btn-secondary photo-source-btn" id="btn-upload-photos">Choose files</button>
         </div>
 
-        <div class="photo-panel" id="photo-panel-ai" hidden>
-          <div class="photo-panel-bar">
-            <p>Describe what you want. We’ll create a few options for you to choose from.</p>
-            <button type="button" class="photo-change-source">Change</button>
-          </div>
+        <div class="photo-panel" id="photo-panel-ai"{% if photo_source != 'ai' %} hidden{% endif %}>
+          <p class="platform-note" style="margin-bottom:0.75rem;">Describe what you want. We’ll create a few options for you to choose from.</p>
           <label class="form-label" for="{{ form.image_prompt.id_for_label }}">{{ form.image_prompt.label }}</label>
           {{ form.image_prompt }}
           {% if form.image_prompt.errors %}<p class="form-error">{{ form.image_prompt.errors.0 }}</p>{% endif %}
@@ -110,11 +110,8 @@
           </div>
         </div>
 
-        <div class="photo-panel" id="photo-panel-library" hidden>
-          <div class="photo-panel-bar">
-            <p>Pick one or more photos you’ve saved before.</p>
-            <button type="button" class="photo-change-source">Change</button>
-          </div>
+        <div class="photo-panel" id="photo-panel-library"{% if photo_source != 'library' %} hidden{% endif %}>
+          <p class="platform-note" style="margin-bottom:0.75rem;">Pick one or more photos you’ve saved before.</p>
           <button type="button" class="btn-secondary photo-source-btn" id="btn-choose-saved">Browse saved photos</button>
         </div>
 
@@ -1503,41 +1500,47 @@
   }
 
   (function bindPhotoChooser() {
+    var group = document.getElementById('photo-add-group');
     var chooser = document.getElementById('photo-chooser');
     var lead = document.getElementById('photo-chooser-lead');
+    var sourceField = document.getElementById('id_photo_source');
     var panels = {
       device: document.getElementById('photo-panel-device'),
       ai: document.getElementById('photo-panel-ai'),
       library: document.getElementById('photo-panel-library')
     };
     var leads = {
-      start: 'Choose one way to add photos. You can add more after.',
+      start: 'Choose one way to add photos.',
       device: 'Adding from your device',
       ai: 'Creating photos with AI',
       library: 'Picking from saved photos'
     };
+    var locked = false;
 
-    function showPanel(source) {
-      if (chooser) chooser.hidden = true;
+    function showPanel(source, persist) {
+      if (!source || !panels[source]) return;
+      locked = true;
+      if (sourceField) sourceField.value = source;
+      if (group) group.classList.add('is-locked');
+      if (chooser) {
+        chooser.hidden = true;
+        chooser.setAttribute('hidden', 'hidden');
+      }
+      document.querySelectorAll('.photo-choice').forEach(function (btn) {
+        btn.disabled = true;
+      });
       Object.keys(panels).forEach(function (key) {
-        if (panels[key]) panels[key].hidden = key !== source;
+        if (!panels[key]) return;
+        panels[key].hidden = key !== source;
       });
       if (lead) lead.textContent = leads[source] || leads.start;
     }
 
-    function showChooser() {
-      Object.keys(panels).forEach(function (key) {
-        if (panels[key]) panels[key].hidden = true;
-      });
-      if (chooser) chooser.hidden = false;
-      if (lead) lead.textContent = leads.start;
-    }
-
     document.querySelectorAll('.photo-choice').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        if (btn.disabled) return;
+        if (locked || btn.disabled) return;
         var source = btn.getAttribute('data-source') || '';
-        showPanel(source);
+        showPanel(source, true);
         if (source === 'device' && galleryInput) {
           setTimeout(function () { galleryInput.click(); }, 50);
         }
@@ -1548,12 +1551,11 @@
       });
     });
 
-    document.querySelectorAll('.photo-change-source').forEach(function (btn) {
-      btn.addEventListener('click', showChooser);
-    });
-
-    if (document.querySelector('#photo-panel-ai .form-error')) {
-      showPanel('ai');
+    var initial = sourceField ? String(sourceField.value || '').trim() : '';
+    if (initial === 'device' || initial === 'ai' || initial === 'library') {
+      showPanel(initial, false);
+    } else if (document.querySelector('#photo-panel-ai .form-error')) {
+      showPanel('ai', true);
     }
   })();
   if (pickerModal) {

@@ -416,6 +416,23 @@ def _post_form_context(request, form, *, is_edit, post=None, page_title='Create 
 
     ctx['existing_preview_urls'] = [x['url'] for x in preview_items if x.get('url')]
     ctx['existing_preview_items'] = preview_items
+
+    photo_source = ''
+    if getattr(form, 'data', None):
+        photo_source = (form.data.get('photo_source') or '').strip()
+    if photo_source not in {'device', 'ai', 'library'}:
+        photo_source = ''
+    if not photo_source and post is not None and preview_items:
+        sources = set()
+        for item in post.ordered_media():
+            asset = getattr(item, 'asset', None)
+            if asset and getattr(asset, 'source', None):
+                sources.add(asset.source)
+        if sources == {MediaAsset.SOURCE_AI}:
+            photo_source = 'ai'
+        elif preview_items:
+            photo_source = 'device'
+    ctx['photo_source'] = photo_source
     return ctx
 
 
