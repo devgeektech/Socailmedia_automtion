@@ -1581,9 +1581,6 @@
       // Clear photos from other methods when the user picks a source
       if (openAction && previous !== source) keepOnlySource(source);
       if (!openAction) return;
-      if (source === 'device' && galleryInput) {
-        setTimeout(function () { galleryInput.click(); }, 50);
-      }
       if (source === 'library') openMediaPicker();
       if (source === 'ai' && imagePrompt) {
         setTimeout(function () { imagePrompt.focus(); }, 50);
