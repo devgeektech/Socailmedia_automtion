@@ -43,7 +43,7 @@
 
       <div class="form-group ai-image-group">
         <label class="form-label" for="{{ form.image_prompt.id_for_label }}">{{ form.image_prompt.label }}</label>
-        <p class="platform-note" style="margin-bottom:0.65rem;">Describe what you want. We’ll create 3 options — pick one image, or several to post together.</p>
+        <p class="platform-note" style="margin-bottom:0.65rem;">Describe what you want. We’ll create 3 options — pick one or more, then check the live preview.</p>
         {{ form.image_prompt }}
         {% if form.image_prompt.errors %}<p class="form-error">{{ form.image_prompt.errors.0 }}</p>{% endif %}
         <div class="ai-image-actions">
@@ -56,38 +56,18 @@
           </button>
           <span class="ai-status" id="ai-status" aria-live="polite"></span>
         </div>
-        <div class="ai-image-picker" id="ai-image-picker" hidden>
-          <p class="platform-note ai-picker-hint">Tap to select. Choose more than one to post them as a multi-photo post.</p>
-          <div class="ai-image-options" id="ai-image-options"></div>
-        </div>
       </div>
-
       <div class="form-group photo-source-group">
         <label class="form-label">Photos</label>
-        <p class="platform-note" style="margin-bottom:0.75rem;">Upload new photos, or pick from your saved library. You can add more than one.</p>
+        <p class="platform-note" style="margin-bottom:0.75rem;">Upload from your device or choose saved photos. Everything you pick shows in the live preview — use × there to remove one.</p>
         <div class="photo-source-actions">
           <button type="button" class="btn-secondary photo-source-btn" id="btn-upload-photos">Upload from device</button>
           <button type="button" class="btn-secondary photo-source-btn" id="btn-choose-saved"{% if not has_library_photos and not library_assets %} disabled title="No saved photos yet"{% endif %}>Choose saved photos</button>
         </div>
         <input type="file" name="carousel_files" id="id_carousel_files" class="photo-file-input" accept="image/*" multiple>
-        <div class="gallery-upload-thumbs" id="gallery-upload-thumbs" hidden></div>
-        <div class="selected-library-row" id="selected-library-row"{% if not library_assets %} hidden{% endif %}>
-          <p class="platform-note" id="library-pick-status" aria-live="polite" data-empty="No saved photos selected.">
-            {% if library_assets %}
-              {% if library_assets|length == 1 %}1 saved photo selected.{% else %}{{ library_assets|length }} saved photos selected.{% endif %}
-            {% else %}
-              No saved photos selected.
-            {% endif %}
-          </p>
-          <div class="selected-library-thumbs" id="selected-library-thumbs">
-            {% for asset in library_assets %}
-            <button type="button" class="selected-library-thumb" data-id="{{ asset.pk }}" data-url="{{ asset.file.url }}" title="Remove photo">
-              <img src="{{ asset.file.url }}" alt="{{ asset.original_name|default:'Saved photo' }}" loading="lazy">
-              <span class="selected-library-remove" aria-hidden="true">×</span>
-            </button>
-            {% endfor %}
-          </div>
-        </div>
+        <div id="gallery-upload-thumbs" hidden></div>
+        <p class="platform-note" id="library-pick-status" aria-live="polite" hidden data-empty=""></p>
+        <div id="selected-library-thumbs" hidden></div>
         <div hidden>{{ form.regenerate_image }}</div>
       </div>
 
@@ -236,6 +216,24 @@
   </div>
 </div>
 {{ existing_preview_items|json_script:"existing-preview-items" }}
+{{ library_assets_json|json_script:"selected-library-seed" }}
+
+<div class="media-picker-modal" id="ai-picker-modal" hidden>
+  <div class="media-picker-backdrop js-ai-picker-close" tabindex="-1"></div>
+  <div class="media-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-picker-title">
+    <div class="media-picker-header">
+      <div>
+        <h2 class="media-picker-title" id="ai-picker-title">Choose AI photos</h2>
+        <p class="platform-note">Tap to select. Your choices appear in the live preview.</p>
+      </div>
+      <button type="button" class="btn-secondary btn-sm js-ai-picker-close" aria-label="Close">Close</button>
+    </div>
+    <div class="ai-image-options media-picker-ai-options" id="ai-image-options"></div>
+    <div class="media-picker-footer">
+      <button type="button" class="btn-primary" id="ai-picker-done" style="width:auto;">Done</button>
+    </div>
+  </div>
+</div>
 
 <div class="media-picker-modal" id="media-picker-modal" hidden>
   <div class="media-picker-backdrop js-media-picker-close" tabindex="-1"></div>
@@ -286,8 +284,9 @@
   var saveDraftField = document.getElementById('id_save_draft');
   var aiStatus = document.getElementById('ai-status');
   var regenerate = document.getElementById('id_regenerate_image');
-  var picker = document.getElementById('ai-image-picker');
+  var picker = document.getElementById('ai-picker-modal');
   var optionsEl = document.getElementById('ai-image-options');
+  var aiPickerDone = document.getElementById('ai-picker-done');
   var formLocked = false;
 
   var previewDesc = document.getElementById('preview-description');
@@ -326,12 +325,9 @@
     var publishAction = document.querySelector('input[name="publish_action"]:checked');
     var fb = document.querySelector('input[name="publish_to_facebook"]');
     var ig = document.querySelector('input[name="publish_to_instagram"]');
-    var images = [];
-    if (optionsEl) {
-      optionsEl.querySelectorAll('.ai-image-option').forEach(function (btn) {
-        images.push({ path: btn.dataset.path || '', url: btn.dataset.url || '' });
-      });
-    }
+    var images = selectedAi.map(function (item) {
+      return { path: item.path || '', url: item.url || '' };
+    });
     return {
       description: description ? description.value : '',
       caption: caption ? caption.value : '',
@@ -390,18 +386,28 @@
       var ig = document.querySelector('input[name="publish_to_instagram"]');
       if (fb && !fb.disabled && typeof draft.publish_to_facebook === 'boolean') fb.checked = draft.publish_to_facebook;
       if (ig && !ig.disabled && typeof draft.publish_to_instagram === 'boolean') ig.checked = draft.publish_to_instagram;
-      if (draft.images && draft.images.length && optionsEl) {
-        renderOptions(draft.images);
+      if (draft.images && draft.images.length) {
         var pathList = [];
         if (draft.generated_image_paths) {
           pathList = String(draft.generated_image_paths).split(',').map(function (s) { return s.trim(); }).filter(Boolean);
         } else if (draft.generated_image_path) {
           pathList = [draft.generated_image_path];
         }
-        pathList.forEach(function (path) {
-          var selected = optionsEl.querySelector('.ai-image-option[data-path="' + path + '"]');
-          if (selected) toggleAiOption(selected);
+        selectedAi = [];
+        draft.images.forEach(function (img) {
+          if (!img || !img.path || !img.url) return;
+          if (pathList.length && pathList.indexOf(img.path) < 0) return;
+          selectedAi.push({ path: img.path, url: img.url });
         });
+        if (!selectedAi.length && pathList.length) {
+          draft.images.forEach(function (img) {
+            if (img && img.path && img.url && pathList.indexOf(img.path) >= 0) {
+              selectedAi.push({ path: img.path, url: img.url });
+            }
+          });
+        }
+        syncGeneratedPaths();
+        rebuildPreviewFromSelections();
       } else if (draft.preview_image_url) {
         existingPreviewItems = [{ url: draft.preview_image_url, asset_id: 0 }];
         rebuildPreviewFromSelections();
@@ -526,11 +532,11 @@
   var galleryThumbs = document.getElementById('gallery-upload-thumbs');
   var libraryIds = document.getElementById('id_library_asset_ids');
   var libraryStatus = document.getElementById('library-pick-status');
-  var selectedLibraryRow = document.getElementById('selected-library-row');
   var selectedLibraryThumbs = document.getElementById('selected-library-thumbs');
   var selectedAi = [];
   var selectedLibrary = [];
   var selectedLibraryMeta = {};
+  var galleryPreviewItems = [];
   var existingPreviewItems = [];
   try {
     var existingEl = document.getElementById('existing-preview-items');
@@ -539,28 +545,22 @@
   } catch (err) {
     existingPreviewItems = [];
   }
-
-  // Seed selected saved photos already rendered by the server
-  if (selectedLibraryThumbs) {
-    selectedLibraryThumbs.querySelectorAll('.selected-library-thumb').forEach(function (btn) {
-      var id = String(btn.getAttribute('data-id') || '');
-      var url = btn.getAttribute('data-url') || '';
-      if (!id || !url) return;
-      selectedLibrary.push(id);
-      selectedLibraryMeta[id] = { id: id, url: url, name: (btn.querySelector('img') && btn.querySelector('img').alt) || 'Saved photo' };
-    });
-  }
+  try {
+    var seedEl = document.getElementById('selected-library-seed');
+    var seedItems = seedEl ? JSON.parse(seedEl.textContent) : [];
+    if (Array.isArray(seedItems)) {
+      seedItems.forEach(function (item) {
+        var id = String(item.id || '');
+        if (!id || !item.url) return;
+        if (selectedLibrary.indexOf(id) < 0) selectedLibrary.push(id);
+        selectedLibraryMeta[id] = { id: id, url: item.url, name: item.name || 'Saved photo' };
+      });
+    }
+  } catch (err) { /* ignore */ }
 
   function syncLibraryStatus() {
-    if (!libraryStatus) return;
-    if (!selectedLibrary.length) {
-      libraryStatus.textContent = libraryStatus.getAttribute('data-empty') || 'No saved photos selected.';
-    } else if (selectedLibrary.length === 1) {
-      libraryStatus.textContent = '1 saved photo selected.';
-    } else {
-      libraryStatus.textContent = selectedLibrary.length + ' saved photos selected.';
-    }
-    if (selectedLibraryRow) selectedLibraryRow.hidden = !selectedLibrary.length;
+    // Status lives in preview only — keep this quiet on the form
+    if (libraryStatus) libraryStatus.textContent = '';
   }
 
   function syncLibraryHidden() {
@@ -568,32 +568,7 @@
   }
 
   function renderSelectedLibraryThumbs() {
-    if (!selectedLibraryThumbs) return;
-    selectedLibraryThumbs.innerHTML = '';
-    selectedLibrary.forEach(function (id) {
-      var meta = selectedLibraryMeta[id];
-      if (!meta || !meta.url) return;
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'selected-library-thumb';
-      btn.setAttribute('data-id', id);
-      btn.setAttribute('data-url', meta.url);
-      btn.title = 'Remove photo';
-      var img = document.createElement('img');
-      img.src = meta.url;
-      img.alt = meta.name || 'Saved photo';
-      img.loading = 'lazy';
-      var x = document.createElement('span');
-      x.className = 'selected-library-remove';
-      x.setAttribute('aria-hidden', 'true');
-      x.textContent = '×';
-      btn.appendChild(img);
-      btn.appendChild(x);
-      btn.addEventListener('click', function () {
-        toggleLibrarySelection(id, meta.url, meta.name, false);
-      });
-      selectedLibraryThumbs.appendChild(btn);
-    });
+    // Selected photos are shown only in the live preview
     syncLibraryStatus();
   }
 
@@ -655,7 +630,13 @@
       });
     });
 
-    if (galleryThumbs) {
+    if (galleryPreviewItems.length) {
+      galleryPreviewItems.forEach(function (item, i) {
+        if (item && item.url) {
+          pushItem({ source: 'gallery', id: String(i), url: item.url, name: item.name || '' });
+        }
+      });
+    } else if (galleryThumbs) {
       galleryThumbs.querySelectorAll('.gallery-upload-thumb').forEach(function (wrap, i) {
         var img = wrap.querySelector('img');
         if (img && img.src) {
@@ -713,22 +694,19 @@
       img.alt = multi ? ('Photo ' + (index + 1) + ' of ' + items.length) : 'Post photo';
       img.draggable = false;
       cell.appendChild(img);
-      if (multi) {
-        var removeBtn = document.createElement('button');
-        removeBtn.type = 'button';
-        removeBtn.className = 'preview-photo-remove';
-        removeBtn.setAttribute('aria-label', 'Remove photo ' + (index + 1));
-        removeBtn.textContent = '×';
-        removeBtn.addEventListener('click', function (event) {
-          event.preventDefault();
-          event.stopPropagation();
-          removePreviewItem(item);
-        });
-        cell.appendChild(removeBtn);
-      }
+      var removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'preview-photo-remove';
+      removeBtn.setAttribute('aria-label', 'Remove photo');
+      removeBtn.textContent = '×';
+      removeBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        removePreviewItem(item);
+      });
+      cell.appendChild(removeBtn);
       previewPhotos.appendChild(cell);
     });
-
     if (previewSliderDots) {
       previewSliderDots.innerHTML = '';
       if (multi) {
@@ -828,35 +806,18 @@
   })();
 
   function removeGalleryFileAt(index) {
-    if (!galleryInput || !galleryInput.files) return;
+    if (!galleryInput) return;
     var dt = new DataTransfer();
-    Array.prototype.forEach.call(galleryInput.files, function (file, i) {
+    Array.prototype.forEach.call(galleryInput.files || [], function (file, i) {
       if (i !== index) dt.items.add(file);
     });
     galleryInput.files = dt.files;
+    galleryPreviewItems = galleryPreviewItems.filter(function (_, i) { return i !== index; });
     if (galleryThumbs) {
       galleryThumbs.innerHTML = '';
-      var files = Array.prototype.slice.call(galleryInput.files || []);
-      if (!files.length) {
-        galleryThumbs.hidden = true;
-        return;
-      }
-      galleryThumbs.hidden = false;
-      files.forEach(function (file) {
-        var wrap = document.createElement('div');
-        wrap.className = 'gallery-upload-thumb';
-        var img = document.createElement('img');
-        img.alt = file.name;
-        wrap.appendChild(img);
-        galleryThumbs.appendChild(wrap);
-        var reader = new FileReader();
-        reader.onload = function (e) {
-          img.src = e.target.result;
-          renderPreviewPhotos();
-        };
-        reader.readAsDataURL(file);
-      });
+      galleryThumbs.hidden = true;
     }
+    renderPreviewPhotos();
   }
 
   function removePreviewItem(item) {
@@ -946,18 +907,18 @@
     rebuildPreviewFromSelections();
     if (aiStatus) {
       if (!selectedAi.length) aiStatus.textContent = 'Select one or more photos.';
-      else if (selectedAi.length === 1) aiStatus.textContent = '1 photo selected.';
-      else aiStatus.textContent = selectedAi.length + ' photos selected — check the preview on the right.';
+      else if (selectedAi.length === 1) aiStatus.textContent = '1 photo selected — see live preview.';
+      else aiStatus.textContent = selectedAi.length + ' photos selected — see live preview.';
     }
   }
 
   function renderOptions(images) {
-    if (!picker || !optionsEl) return;
+    if (!optionsEl) return;
     optionsEl.innerHTML = '';
     selectedAi = [];
     syncGeneratedPaths();
     if (!images || !images.length) {
-      setHidden(picker, true);
+      closeAiPicker();
       return;
     }
 
@@ -979,7 +940,21 @@
       optionsEl.appendChild(btn);
     });
 
-    setHidden(picker, false);
+    openAiPicker();
+  }
+
+  function openAiPicker() {
+    if (!picker) return;
+    picker.hidden = false;
+    document.body.classList.add('media-picker-open');
+  }
+
+  function closeAiPicker() {
+    if (!picker) return;
+    picker.hidden = true;
+    if (!document.getElementById('media-picker-modal') || document.getElementById('media-picker-modal').hidden) {
+      document.body.classList.remove('media-picker-open');
+    }
   }
 
   if (optionsEl) {
@@ -990,31 +965,35 @@
       toggleAiOption(btn);
     });
   }
+  if (aiPickerDone) aiPickerDone.addEventListener('click', closeAiPicker);
+  if (picker) {
+    picker.querySelectorAll('.js-ai-picker-close').forEach(function (el) {
+      el.addEventListener('click', closeAiPicker);
+    });
+  }
 
   if (galleryInput) {
     galleryInput.addEventListener('change', function () {
-      if (!galleryThumbs) return;
-      galleryThumbs.innerHTML = '';
+      galleryPreviewItems = [];
+      if (galleryThumbs) {
+        galleryThumbs.innerHTML = '';
+        galleryThumbs.hidden = true;
+      }
       var files = Array.prototype.slice.call(galleryInput.files || []).slice(0, 10);
       if (!files.length) {
-        galleryThumbs.hidden = true;
         rebuildPreviewFromSelections();
         return;
       }
-      galleryThumbs.hidden = false;
       var pending = files.length;
-      files.forEach(function (file) {
+      files.forEach(function (file, index) {
         var reader = new FileReader();
         reader.onload = function (e) {
-          var wrap = document.createElement('div');
-          wrap.className = 'gallery-upload-thumb';
-          var img = document.createElement('img');
-          img.src = e.target.result;
-          img.alt = file.name;
-          wrap.appendChild(img);
-          galleryThumbs.appendChild(wrap);
+          galleryPreviewItems[index] = { url: e.target.result, name: file.name };
           pending -= 1;
-          if (pending <= 0) rebuildPreviewFromSelections();
+          if (pending <= 0) {
+            galleryPreviewItems = galleryPreviewItems.filter(Boolean);
+            rebuildPreviewFromSelections();
+          }
         };
         reader.readAsDataURL(file);
       });
@@ -1190,6 +1169,8 @@
       selectedAi = [];
       selectedLibrary = [];
       selectedLibraryMeta = {};
+      galleryPreviewItems = [];
+      existingPreviewItems = [];
       syncGeneratedPaths();
       syncLibraryHidden();
       renderSelectedLibraryThumbs();
@@ -1197,8 +1178,9 @@
         galleryThumbs.innerHTML = '';
         galleryThumbs.hidden = true;
       }
+      if (galleryInput) galleryInput.value = '';
       if (optionsEl) optionsEl.innerHTML = '';
-      if (picker) picker.hidden = true;
+      closeAiPicker();
       if (aiStatus) aiStatus.textContent = '';
       setGenerating(false);
       renderPreviewPhotos();
@@ -1224,7 +1206,7 @@
       }
       setGenerating(true);
       if (aiStatus) aiStatus.textContent = '';
-      if (picker) picker.hidden = true;
+      closeAiPicker();
       if (optionsEl) optionsEl.innerHTML = '';
       selectedAi = [];
       syncGeneratedPaths();
@@ -1252,11 +1234,10 @@
             throw new Error('No images returned.');
           }
           renderOptions(imgs);
-          rebuildPreviewFromSelections();
-          if (aiStatus) aiStatus.textContent = 'Photos ready — select one or more.';
+          if (aiStatus) aiStatus.textContent = 'Pick photos in the popup — they show in the preview.';
         })
         .catch(function (err) {
-          if (picker) picker.hidden = true;
+          closeAiPicker();
           if (optionsEl) optionsEl.innerHTML = '';
           selectedAi = [];
           syncGeneratedPaths();
@@ -1323,20 +1304,13 @@
     });
 
     if (aiImages.length) {
-      renderOptions(aiImages);
-      selectedAi = [];
-      aiImages.forEach(function (img) {
-        var btn = optionsEl && optionsEl.querySelector('.ai-image-option[data-path="' + img.path + '"]');
-        if (btn) {
-          btn.classList.add('is-selected');
-          btn.setAttribute('aria-pressed', 'true');
-        }
-        selectedAi.push({ path: img.path, url: img.url });
+      selectedAi = aiImages.map(function (img) {
+        return { path: img.path, url: img.url };
       });
       syncGeneratedPaths();
       if (aiStatus) {
-        if (selectedAi.length === 1) aiStatus.textContent = '1 photo selected.';
-        else aiStatus.textContent = selectedAi.length + ' photos selected — check the preview on the right.';
+        if (selectedAi.length === 1) aiStatus.textContent = '1 photo selected — see live preview.';
+        else aiStatus.textContent = selectedAi.length + ' photos selected — see live preview.';
       }
     }
   })();
@@ -1509,7 +1483,9 @@
     });
   }
   document.addEventListener('keydown', function (event) {
-    if (event.key === 'Escape' && pickerModal && !pickerModal.hidden) closeMediaPicker();
+    if (event.key !== 'Escape') return;
+    if (picker && !picker.hidden) closeAiPicker();
+    if (pickerModal && !pickerModal.hidden) closeMediaPicker();
   });
 
   renderPreviewPhotos();

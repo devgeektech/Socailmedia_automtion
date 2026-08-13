@@ -393,6 +393,15 @@ def _post_form_context(request, form, *, is_edit, post=None, page_title='Create 
         'facebook_ready': facebook_publish_ready(request.user),
         'instagram_ready': instagram_publish_ready(request.user),
         'library_assets': selected_assets,
+        'library_assets_json': [
+            {
+                'id': a.pk,
+                'url': a.file.url if a.file else '',
+                'name': a.original_name or 'Saved photo',
+            }
+            for a in selected_assets
+            if a.file
+        ],
         'has_library_photos': MediaAsset.objects.filter(
             user=request.user,
             kind=MediaAsset.KIND_IMAGE,
