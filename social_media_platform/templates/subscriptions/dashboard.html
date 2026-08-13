@@ -68,63 +68,61 @@
     </div>
   </div>
 
-  <form class="glass-card post-filters" method="get" action="{% url 'subscriptions:dashboard' %}">
-    <div class="post-filters-grid">
-      <label class="form-label">
-        Search
-        <input type="search" name="q" value="{{ filters.q }}" class="glass-input" placeholder="Caption, description…">
+  <form class="glass-card post-filters" id="post-filters" method="get" action="{% url 'subscriptions:dashboard' %}">
+    <input type="hidden" name="status" id="filter-status" value="{{ filters.status }}">
+    <div class="post-filters-toolbar">
+      <label class="post-filter-search">
+        <span class="post-filter-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"></circle>
+            <path d="M20 20l-3.5-3.5"></path>
+          </svg>
+        </span>
+        <span class="visually-hidden">Search posts</span>
+        <input type="search" name="q" id="filter-q" value="{{ filters.q }}" placeholder="Search posts…" autocomplete="off">
       </label>
-      <label class="form-label">
-        Status
-        <select name="status" class="glass-input">
-          <option value="">All</option>
-          <option value="published" {% if filters.status == 'published' %}selected{% endif %}>Published</option>
-          <option value="draft" {% if filters.status == 'draft' %}selected{% endif %}>Draft</option>
-          <option value="scheduled" {% if filters.status == 'scheduled' %}selected{% endif %}>Scheduled</option>
-          <option value="failed" {% if filters.status == 'failed' %}selected{% endif %}>Failed</option>
-        </select>
-      </label>
-      <label class="form-label">
-        Platform
-        <select name="platform" class="glass-input">
-          <option value="">All</option>
-          <option value="facebook" {% if filters.platform == 'facebook' %}selected{% endif %}>Facebook</option>
-          <option value="instagram" {% if filters.platform == 'instagram' %}selected{% endif %}>Instagram</option>
-        </select>
-      </label>
-      <label class="form-label">
-        From
-        <input type="date" name="date_from" value="{{ filters.date_from }}" class="glass-input">
-      </label>
-      <label class="form-label">
-        To
-        <input type="date" name="date_to" value="{{ filters.date_to }}" class="glass-input">
-      </label>
-      <div class="post-filters-actions">
-        <button type="submit" class="btn-primary btn-sm">Filter</button>
-        <a href="{% url 'subscriptions:dashboard' %}" class="btn-secondary btn-sm">Reset</a>
+
+      <div class="post-filter-segment" role="group" aria-label="Platform">
+        <button type="button" class="post-filter-chip{% if not filters.platform %} is-active{% endif %}" data-filter="platform" data-value="">All</button>
+        <button type="button" class="post-filter-chip{% if filters.platform == 'facebook' %} is-active{% endif %}" data-filter="platform" data-value="facebook">Facebook</button>
+        <button type="button" class="post-filter-chip{% if filters.platform == 'instagram' %} is-active{% endif %}" data-filter="platform" data-value="instagram">Instagram</button>
       </div>
+      <input type="hidden" name="platform" id="filter-platform" value="{{ filters.platform }}">
+
+      <div class="post-filter-dates" aria-label="Date range">
+        <label class="post-filter-date">
+          <span>From</span>
+          <input type="date" name="date_from" id="filter-date-from" value="{{ filters.date_from }}">
+        </label>
+        <span class="post-filter-date-sep" aria-hidden="true">–</span>
+        <label class="post-filter-date">
+          <span>To</span>
+          <input type="date" name="date_to" id="filter-date-to" value="{{ filters.date_to }}">
+        </label>
+      </div>
+
+      <button type="button" class="post-filter-clear" id="filter-reset"{% if not filters_active and not filters.status %} hidden{% endif %}>Clear</button>
     </div>
   </form>
 
   <div class="stats-grid post-tabs" role="tablist" aria-label="Filter posts">
-    <button type="button" class="glass-card stat-card post-tab is-active" role="tab" aria-selected="true" data-tab="all">
+    <button type="button" class="glass-card stat-card post-tab{% if not filters.status %} is-active{% endif %}" role="tab" aria-selected="{% if not filters.status %}true{% else %}false{% endif %}" data-tab="all">
       <div class="stat-value">{{ stats.total }}</div>
       <div class="stat-label">All posts</div>
     </button>
-    <button type="button" class="glass-card stat-card post-tab" role="tab" aria-selected="false" data-tab="published">
+    <button type="button" class="glass-card stat-card post-tab{% if filters.status == 'published' %} is-active{% endif %}" role="tab" aria-selected="{% if filters.status == 'published' %}true{% else %}false{% endif %}" data-tab="published">
       <div class="stat-value">{{ stats.published }}</div>
       <div class="stat-label">Published</div>
     </button>
-    <button type="button" class="glass-card stat-card post-tab" role="tab" aria-selected="false" data-tab="draft">
+    <button type="button" class="glass-card stat-card post-tab{% if filters.status == 'draft' %} is-active{% endif %}" role="tab" aria-selected="{% if filters.status == 'draft' %}true{% else %}false{% endif %}" data-tab="draft">
       <div class="stat-value">{{ stats.drafts }}</div>
       <div class="stat-label">Drafts</div>
     </button>
-    <button type="button" class="glass-card stat-card post-tab" role="tab" aria-selected="false" data-tab="scheduled">
+    <button type="button" class="glass-card stat-card post-tab{% if filters.status == 'scheduled' %} is-active{% endif %}" role="tab" aria-selected="{% if filters.status == 'scheduled' %}true{% else %}false{% endif %}" data-tab="scheduled">
       <div class="stat-value">{{ stats.scheduled }}</div>
       <div class="stat-label">Scheduled</div>
     </button>
-    <button type="button" class="glass-card stat-card post-tab" role="tab" aria-selected="false" data-tab="failed">
+    <button type="button" class="glass-card stat-card post-tab{% if filters.status == 'failed' %} is-active{% endif %}" role="tab" aria-selected="{% if filters.status == 'failed' %}true{% else %}false{% endif %}" data-tab="failed">
       <div class="stat-value">{{ stats.failed }}</div>
       <div class="stat-label">Failed</div>
     </button>
@@ -132,152 +130,18 @@
 
   <div class="posts-section">
     <div class="posts-section-header">
-      <h2 class="posts-section-title" id="posts-tab-title">Your posts</h2>
+      <h2 class="posts-section-title" id="posts-tab-title">
+        {% if filters.status == 'published' %}Published posts
+        {% elif filters.status == 'draft' %}Draft posts
+        {% elif filters.status == 'scheduled' %}Scheduled posts
+        {% elif filters.status == 'failed' %}Failed posts
+        {% else %}Your posts{% endif %}
+      </h2>
       <a href="{% url 'posts:create' %}" class="btn-primary btn-sm">+ New Post</a>
     </div>
-
-    {% if posts %}
-    <div class="post-list" id="post-list">
-      {% for post in posts %}
-      <article class="glass-card social-post-card" data-status="{{ post.status }}">
-        <div class="social-post-image">
-            {% if post.image %}
-                <img src="{{ post.image.url }}" alt="{{ post.caption }}">
-            {% elif post.video %}
-                <div class="no-image"><span>▶</span></div>
-            {% else %}
-                <div class="no-image">
-                    <span>🖼</span>
-                </div>
-            {% endif %}
-            {% if post.media_type == 'carousel' %}
-            <span class="media-type-badge">{{ post.media_items.count }} photos</span>
-            {% elif post.media_type == 'video' %}
-            <span class="media-type-badge">Video</span>
-            {% endif %}
-        </div>
-        <div class="social-post-content">
-    
-            <div class="social-post-header">
-
-                <div class="social-post-copy">
-                    <h3>{{ post.caption|default:"Untitled Post" }}</h3>
-
-                    <p class="post-desc">
-                        {{ post.description|truncatechars:90 }}
-                    </p>
-
-                    <div class="platforms">
-                        {% if post.facebook_post_id %}
-                            <a class="chip facebook" href="https://www.facebook.com/{{ post.facebook_post_id }}" target="_blank" rel="noopener">Facebook ✓</a>
-                        {% elif post.publish_to_facebook %}
-                            <span class="chip facebook">Facebook</span>
-                        {% endif %}
-                        {% if post.instagram_media_id %}
-                            <span class="chip instagram" title="Published to Instagram">Instagram ✓</span>
-                        {% elif post.publish_to_instagram %}
-                            <span class="chip instagram">Instagram</span>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <div class="status-section">
-
-                    <span class="status-pill status-{{ post.status }}">
-                        {{ post.get_status_display }}
-                    </span>
-
-                    {% if post.status == 'scheduled' and post.scheduled_at %}
-                        <small>{{ post.scheduled_at|date:"M d, Y · g:i A" }}</small>
-
-                    {% elif post.status == 'published' and post.published_at %}
-                        <small>{{ post.published_at|date:"M d, Y · g:i A" }}</small>
-
-                    {% else %}
-                        <small>{{ post.created_at|date:"M d, Y" }}</small>
-                    {% endif %}
-
-                </div>
-
-            </div>
-    
-            <div class="social-post-actions">
-
-                <a href="{% url 'posts:preview' post.pk %}" class="icon-btn" title="Preview" aria-label="Preview">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                        <circle cx="12" cy="12" r="3"></circle>
-                    </svg>
-                </a>
-
-                {% if post.status == 'draft' %}
-                <a href="{% url 'posts:edit' post.pk %}" class="icon-btn" title="Continue draft" aria-label="Continue draft">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M12 20h9"></path>
-                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
-                    </svg>
-                </a>
-                {% elif post.can_edit or post.status == 'published' %}
-                <a href="{% url 'posts:edit' post.pk %}" class="icon-btn" title="{% if post.status == 'scheduled' %}Reschedule{% else %}Edit{% endif %}" aria-label="{% if post.status == 'scheduled' %}Reschedule{% else %}Edit{% endif %}">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M12 20h9"></path>
-                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
-                    </svg>
-                </a>
-                {% endif %}
-
-                <form method="post" action="{% url 'posts:duplicate' post.pk %}" style="display:inline;">
-                  {% csrf_token %}
-                  <button type="submit" class="icon-btn" title="Duplicate post" aria-label="Duplicate post">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <rect x="9" y="9" width="13" height="13" rx="2"></rect>
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                    </svg>
-                  </button>
-                </form>
-
-                <form method="post"
-                      action="{% url 'posts:delete' post.pk %}"
-                      onsubmit="return confirm('{% if post.status == 'draft' %}Delete this draft?{% elif post.status == 'published' %}Remove this from SocialFlow? It will stay live on Facebook/Instagram if already posted there.{% elif post.status == 'scheduled' %}Delete this scheduled post? It will not be published.{% else %}Delete this post?{% endif %}');">
-
-                    {% csrf_token %}
-                    {% if post.status == 'draft' %}
-                    <input type="hidden" name="next_tab" value="draft">
-                    {% elif post.status == 'published' %}
-                    <input type="hidden" name="next_tab" value="published">
-                    {% elif post.status == 'scheduled' %}
-                    <input type="hidden" name="next_tab" value="scheduled">
-                    {% elif post.status == 'failed' %}
-                    <input type="hidden" name="next_tab" value="failed">
-                    {% endif %}
-
-                    <button type="submit" class="icon-btn delete" title="{% if post.status == 'draft' %}Delete draft{% elif post.status == 'published' %}Remove from SocialFlow{% else %}Delete{% endif %}" aria-label="{% if post.status == 'draft' %}Delete draft{% elif post.status == 'published' %}Remove from SocialFlow{% else %}Delete{% endif %}">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                            <polyline points="3 6 5 6 21 6"></polyline>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                            <line x1="10" y1="11" x2="10" y2="17"></line>
-                            <line x1="14" y1="11" x2="14" y2="17"></line>
-                        </svg>
-                    </button>
-
-                </form>
-
-            </div>
-    
-        </div>
-      </article>
-      {% endfor %}
+    <div id="posts-results">
+      {% include 'subscriptions/_dashboard_posts.html' %}
     </div>
-    <div class="glass-card dashboard-empty post-tab-empty" id="post-tab-empty" hidden>
-      <p id="post-tab-empty-text">No posts in this tab yet.</p>
-      <a href="{% url 'posts:create' %}" class="btn-primary" style="width:auto;margin-top:1.25rem;">Add Post</a>
-    </div>
-    {% else %}
-    <div class="glass-card dashboard-empty">
-      <p>No posts yet. Create your first post to start scheduling content.</p>
-      <a href="{% url 'posts:create' %}" class="btn-primary" style="width:auto;margin-top:1.25rem;">Add Post</a>
-    </div>
-    {% endif %}
   </div>
 </div>
 {% endblock %}
@@ -299,11 +163,18 @@
     }
   } catch (err) { /* ignore */ }
 
-  var tabs = document.querySelectorAll('.post-tab');
-  var cards = document.querySelectorAll('.social-post-card[data-status]');
-  var emptyEl = document.getElementById('post-tab-empty');
-  var emptyText = document.getElementById('post-tab-empty-text');
+  var form = document.getElementById('post-filters');
+  var results = document.getElementById('posts-results');
   var titleEl = document.getElementById('posts-tab-title');
+  var statusField = document.getElementById('filter-status');
+  var platformField = document.getElementById('filter-platform');
+  var searchField = document.getElementById('filter-q');
+  var dateFrom = document.getElementById('filter-date-from');
+  var dateTo = document.getElementById('filter-date-to');
+  var resetBtn = document.getElementById('filter-reset');
+  var tabs = document.querySelectorAll('.post-tab');
+  var searchTimer = null;
+  var fetchSeq = 0;
   var titles = {
     all: 'Your posts',
     published: 'Published posts',
@@ -311,79 +182,168 @@
     scheduled: 'Scheduled posts',
     failed: 'Failed posts'
   };
-  var emptyMessages = {
-    all: 'No posts yet.',
-    published: 'No published posts yet.',
-    draft: 'No drafts yet. Save a draft to continue later.',
-    scheduled: 'No scheduled posts yet.',
-    failed: 'No failed posts.'
-  };
 
-  function activateTab(tabName) {
+  function currentFilters() {
+    return {
+      q: searchField ? searchField.value.trim() : '',
+      status: statusField ? statusField.value : '',
+      platform: platformField ? platformField.value : '',
+      date_from: dateFrom ? dateFrom.value : '',
+      date_to: dateTo ? dateTo.value : ''
+    };
+  }
+
+  function filtersAreActive(f) {
+    return !!(f.q || f.status || f.platform || f.date_from || f.date_to);
+  }
+
+  function syncClearButton() {
+    if (!resetBtn) return;
+    resetBtn.hidden = !filtersAreActive(currentFilters());
+  }
+
+  function syncTabs(status) {
+    var tabName = status || 'all';
     tabs.forEach(function (tab) {
       var active = tab.getAttribute('data-tab') === tabName;
       tab.classList.toggle('is-active', active);
       tab.setAttribute('aria-selected', active ? 'true' : 'false');
     });
-    var visible = 0;
-    cards.forEach(function (card) {
-      var show = tabName === 'all' || card.getAttribute('data-status') === tabName;
-      card.hidden = !show;
-      card.style.display = show ? '' : 'none';
-      if (show) visible += 1;
-    });
     if (titleEl) titleEl.textContent = titles[tabName] || 'Your posts';
-    if (emptyEl) {
-      var showEmpty = visible === 0 && cards.length > 0;
-      emptyEl.hidden = !showEmpty;
-      emptyEl.style.display = showEmpty ? '' : 'none';
-      if (emptyText) emptyText.textContent = emptyMessages[tabName] || 'No posts in this tab yet.';
+  }
+
+  function buildQuery(extra) {
+    var f = currentFilters();
+    var params = new URLSearchParams();
+    Object.keys(f).forEach(function (key) {
+      if (f[key]) params.set(key, f[key]);
+    });
+    if (extra) {
+      Object.keys(extra).forEach(function (key) {
+        if (extra[key]) params.set(key, extra[key]);
+        else params.delete(key);
+      });
     }
-    try {
-      var url = new URL(window.location.href);
-      if (tabName === 'all') url.searchParams.delete('tab');
-      else url.searchParams.set('tab', tabName);
-      window.history.replaceState({}, '', url.pathname + url.search);
-    } catch (err) { /* ignore */ }
+    return params;
+  }
+
+  function bindCarousels() {
+    document.querySelectorAll('[data-carousel]').forEach(function (wrap) {
+      if (wrap.getAttribute('data-bound') === '1') return;
+      var slides = Array.prototype.slice.call(wrap.querySelectorAll('[data-slide]'));
+      if (slides.length < 2) return;
+      wrap.setAttribute('data-bound', '1');
+      var index = 0;
+      function show(i) {
+        index = (i + slides.length) % slides.length;
+        slides.forEach(function (img, n) {
+          if (n === index) img.removeAttribute('hidden');
+          else img.setAttribute('hidden', 'hidden');
+        });
+      }
+      var prev = wrap.querySelector('[data-carousel-prev]');
+      var next = wrap.querySelector('[data-carousel-next]');
+      if (prev) prev.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        show(index - 1);
+      });
+      if (next) next.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        show(index + 1);
+      });
+    });
+  }
+
+  function applyFilters() {
+    var params = buildQuery();
+    var seq = ++fetchSeq;
+    if (results) results.classList.add('is-loading');
+    syncClearButton();
+    syncTabs(statusField ? statusField.value : '');
+
+    var displayParams = new URLSearchParams(params.toString());
+    var url = window.location.pathname + (displayParams.toString() ? '?' + displayParams.toString() : '');
+    window.history.replaceState({}, '', url);
+
+    params.set('partial', '1');
+    fetch(window.location.pathname + '?' + params.toString(), {
+      credentials: 'same-origin',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'text/html'
+      }
+    })
+      .then(function (res) {
+        if (!res.ok) throw new Error('Could not filter posts.');
+        return res.text();
+      })
+      .then(function (html) {
+        if (seq !== fetchSeq || !results) return;
+        results.innerHTML = html;
+        bindCarousels();
+      })
+      .catch(function () {
+        if (seq !== fetchSeq || !results) return;
+        results.innerHTML = '<div class="glass-card dashboard-empty"><p>Could not load posts. Refresh and try again.</p></div>';
+      })
+      .finally(function () {
+        if (seq === fetchSeq && results) results.classList.remove('is-loading');
+      });
+  }
+
+  if (form) {
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      applyFilters();
+    });
+  }
+
+  document.querySelectorAll('.post-filter-chip[data-filter="platform"]').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var value = chip.getAttribute('data-value') || '';
+      if (platformField) platformField.value = value;
+      document.querySelectorAll('.post-filter-chip[data-filter="platform"]').forEach(function (el) {
+        el.classList.toggle('is-active', el === chip);
+      });
+      applyFilters();
+    });
+  });
+
+  if (searchField) {
+    searchField.addEventListener('input', function () {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(applyFilters, 250);
+    });
+  }
+  if (dateFrom) dateFrom.addEventListener('change', applyFilters);
+  if (dateTo) dateTo.addEventListener('change', applyFilters);
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function () {
+      if (searchField) searchField.value = '';
+      if (statusField) statusField.value = '';
+      if (platformField) platformField.value = '';
+      if (dateFrom) dateFrom.value = '';
+      if (dateTo) dateTo.value = '';
+      document.querySelectorAll('.post-filter-chip[data-filter="platform"]').forEach(function (el) {
+        el.classList.toggle('is-active', !el.getAttribute('data-value'));
+      });
+      applyFilters();
+    });
   }
 
   tabs.forEach(function (tab) {
     tab.addEventListener('click', function () {
-      activateTab(tab.getAttribute('data-tab') || 'all');
+      var tabName = tab.getAttribute('data-tab') || 'all';
+      if (statusField) statusField.value = tabName === 'all' ? '' : tabName;
+      applyFilters();
     });
   });
 
-  var initial = 'all';
-  try {
-    var start = new URLSearchParams(window.location.search).get('tab');
-    if (start && titles[start]) initial = start;
-  } catch (err) { /* ignore */ }
-  if (cards.length) activateTab(initial);
-
-  document.querySelectorAll('[data-carousel]').forEach(function (wrap) {
-    var slides = Array.prototype.slice.call(wrap.querySelectorAll('[data-slide]'));
-    if (slides.length < 2) return;
-    var index = 0;
-    function show(i) {
-      index = (i + slides.length) % slides.length;
-      slides.forEach(function (img, n) {
-        if (n === index) img.removeAttribute('hidden');
-        else img.setAttribute('hidden', 'hidden');
-      });
-    }
-    var prev = wrap.querySelector('[data-carousel-prev]');
-    var next = wrap.querySelector('[data-carousel-next]');
-    if (prev) prev.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      show(index - 1);
-    });
-    if (next) next.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      show(index + 1);
-    });
-  });
+  bindCarousels();
+  syncClearButton();
 })();
 </script>
 {% endblock %}

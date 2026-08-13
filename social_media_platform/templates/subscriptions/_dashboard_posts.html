@@ -1,0 +1,150 @@
+{% if posts %}
+<div class="post-list" id="post-list">
+  {% for post in posts %}
+  <article class="glass-card social-post-card" data-status="{{ post.status }}">
+    <div class="social-post-image">
+        {% if post.image %}
+            <img src="{{ post.image.url }}" alt="{{ post.caption }}">
+        {% elif post.video %}
+            <div class="no-image"><span>▶</span></div>
+        {% else %}
+            <div class="no-image">
+                <span>🖼</span>
+            </div>
+        {% endif %}
+        {% if post.media_type == 'carousel' %}
+        <span class="media-type-badge">{{ post.media_items.count }} photos</span>
+        {% elif post.media_type == 'video' %}
+        <span class="media-type-badge">Video</span>
+        {% endif %}
+    </div>
+    <div class="social-post-content">
+
+        <div class="social-post-header">
+
+            <div class="social-post-copy">
+                <h3>{{ post.caption|default:"Untitled Post" }}</h3>
+
+                <p class="post-desc">
+                    {{ post.description|truncatechars:90 }}
+                </p>
+
+                <div class="platforms">
+                    {% if post.facebook_post_id %}
+                        <a class="chip facebook" href="https://www.facebook.com/{{ post.facebook_post_id }}" target="_blank" rel="noopener">Facebook ✓</a>
+                    {% elif post.publish_to_facebook %}
+                        <span class="chip facebook">Facebook</span>
+                    {% endif %}
+                    {% if post.instagram_media_id %}
+                        <span class="chip instagram" title="Published to Instagram">Instagram ✓</span>
+                    {% elif post.publish_to_instagram %}
+                        <span class="chip instagram">Instagram</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="status-section">
+
+                <span class="status-pill status-{{ post.status }}">
+                    {{ post.get_status_display }}
+                </span>
+
+                {% if post.status == 'scheduled' and post.scheduled_at %}
+                    <small>{{ post.scheduled_at|date:"M d, Y · g:i A" }}</small>
+
+                {% elif post.status == 'published' and post.published_at %}
+                    <small>{{ post.published_at|date:"M d, Y · g:i A" }}</small>
+
+                {% else %}
+                    <small>{{ post.created_at|date:"M d, Y" }}</small>
+                {% endif %}
+
+            </div>
+
+        </div>
+
+        <div class="social-post-actions">
+
+            <a href="{% url 'posts:preview' post.pk %}" class="icon-btn" title="Preview" aria-label="Preview">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            </a>
+
+            {% if post.status == 'draft' %}
+            <a href="{% url 'posts:edit' post.pk %}" class="icon-btn" title="Continue draft" aria-label="Continue draft">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                </svg>
+            </a>
+            {% elif post.can_edit or post.status == 'published' %}
+            <a href="{% url 'posts:edit' post.pk %}" class="icon-btn" title="{% if post.status == 'scheduled' %}Reschedule{% else %}Edit{% endif %}" aria-label="{% if post.status == 'scheduled' %}Reschedule{% else %}Edit{% endif %}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 20h9"></path>
+                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                </svg>
+            </a>
+            {% endif %}
+
+            <form method="post" action="{% url 'posts:duplicate' post.pk %}" style="display:inline;">
+              {% csrf_token %}
+              <button type="submit" class="icon-btn" title="Duplicate post" aria-label="Duplicate post">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+              </button>
+            </form>
+
+            <form method="post"
+                  action="{% url 'posts:delete' post.pk %}"
+                  onsubmit="return confirm('{% if post.status == 'draft' %}Delete this draft?{% elif post.status == 'published' %}Remove this from SocialFlow? It will stay live on Facebook/Instagram if already posted there.{% elif post.status == 'scheduled' %}Delete this scheduled post? It will not be published.{% else %}Delete this post?{% endif %}');">
+
+                {% csrf_token %}
+                {% if post.status == 'draft' %}
+                <input type="hidden" name="next_tab" value="draft">
+                {% elif post.status == 'published' %}
+                <input type="hidden" name="next_tab" value="published">
+                {% elif post.status == 'scheduled' %}
+                <input type="hidden" name="next_tab" value="scheduled">
+                {% elif post.status == 'failed' %}
+                <input type="hidden" name="next_tab" value="failed">
+                {% endif %}
+
+                <button type="submit" class="icon-btn delete" title="{% if post.status == 'draft' %}Delete draft{% elif post.status == 'published' %}Remove from SocialFlow{% else %}Delete{% endif %}" aria-label="{% if post.status == 'draft' %}Delete draft{% elif post.status == 'published' %}Remove from SocialFlow{% else %}Delete{% endif %}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                </button>
+
+            </form>
+
+        </div>
+
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<div class="glass-card dashboard-empty">
+  {% if filters_active %}
+  <p>No posts match these filters. Try a different search, date, or platform.</p>
+  {% elif filters.status == 'draft' %}
+  <p>No drafts yet. Save a draft to continue later.</p>
+  {% elif filters.status == 'scheduled' %}
+  <p>No scheduled posts yet.</p>
+  {% elif filters.status == 'published' %}
+  <p>No published posts yet.</p>
+  {% elif filters.status == 'failed' %}
+  <p>No failed posts.</p>
+  {% else %}
+  <p>No posts yet. Create your first post to start scheduling content.</p>
+  {% endif %}
+  <a href="{% url 'posts:create' %}" class="btn-primary" style="width:auto;margin-top:1.25rem;">Add Post</a>
+</div>
+{% endif %}

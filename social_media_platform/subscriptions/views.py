@@ -62,7 +62,9 @@ def dashboard_view(request):
     }
 
     q = (request.GET.get('q') or '').strip()
-    status = (request.GET.get('status') or '').strip()
+    status = (request.GET.get('status') or request.GET.get('tab') or '').strip()
+    if status == 'all':
+        status = ''
     platform = (request.GET.get('platform') or '').strip().lower()
     date_from = parse_date((request.GET.get('date_from') or '').strip() or '')
     date_to = parse_date((request.GET.get('date_to') or '').strip() or '')
@@ -105,7 +107,14 @@ def dashboard_view(request):
     fb_ready = facebook_publish_ready(request.user)
     ig_ready = instagram_publish_ready(request.user)
 
-    return render(request, 'subscriptions/dashboard.html', {
+    filters = {
+        'q': q,
+        'status': status,
+        'platform': platform,
+        'date_from': request.GET.get('date_from') or '',
+        'date_to': request.GET.get('date_to') or '',
+    }
+    ctx = {
         'subscription': sub,
         'posts': filtered.prefetch_related('media_items__asset')[:50],
         'stats': stats,
@@ -114,11 +123,13 @@ def dashboard_view(request):
         'facebook_ready': fb_ready,
         'instagram_ready': ig_ready,
         'meta_app_configured': meta_configured(),
-        'filters': {
-            'q': q,
-            'status': status,
-            'platform': platform,
-            'date_from': request.GET.get('date_from') or '',
-            'date_to': request.GET.get('date_to') or '',
-        },
-    })
+        'filters': filters,
+        'filters_active': bool(q or platform or filters['date_from'] or filters['date_to']),
+    }
+    wants_partial = (
+        request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or (request.GET.get('partial') or '') == '1'
+    )
+    if wants_partial:
+        return render(request, 'subscriptions/_dashboard_posts.html', ctx)
+    return render(request, 'subscriptions/dashboard.html', ctx)
