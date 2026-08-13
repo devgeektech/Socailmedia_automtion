@@ -25,39 +25,25 @@
         <small>
           <span class="status-pill status-{{ post.status }}">{{ post.get_status_display }}</span>
           {% if preview_urls|length > 1 %}
-          <span class="chip" style="margin-left:0.35rem;">Carousel · {{ preview_urls|length }} images</span>
+          <span class="chip" style="margin-left:0.35rem;">{{ preview_urls|length }} photos</span>
           {% endif %}
         </small>
       </div>
     </div>
 
-    <div class="social-preview-media{% if preview_urls %} has-image{% endif %}" id="preview-media">
+    <div class="social-preview-media{% if preview_urls %} has-image{% endif %}">
       {% if preview_urls %}
-      <div class="preview-carousel" id="preview-carousel">
-        <button type="button" class="preview-carousel-nav preview-carousel-prev" id="preview-carousel-prev" aria-label="Previous"{% if preview_urls|length < 2 %} hidden{% endif %}>‹</button>
-        <img
-          src="{{ preview_urls.0 }}"
-          alt="Post image"
-          id="preview-image"
-          class="preview-media-el"
-        >
-        <button type="button" class="preview-carousel-nav preview-carousel-next" id="preview-carousel-next" aria-label="Next"{% if preview_urls|length < 2 %} hidden{% endif %}>›</button>
-        <div class="preview-carousel-dots" id="preview-carousel-dots"{% if preview_urls|length < 2 %} hidden{% endif %}></div>
-        <span class="preview-carousel-count" id="preview-carousel-count"{% if preview_urls|length < 2 %} hidden{% endif %}>1 / {{ preview_urls|length }}</span>
+      <div class="preview-photos{% if preview_urls|length > 1 %} is-multi count-{{ preview_urls|length }}{% endif %}">
+        {% for url in preview_urls %}
+        <div class="preview-photo">
+          <img src="{{ url }}" alt="Photo {{ forloop.counter }}">
+        </div>
+        {% endfor %}
       </div>
       {% else %}
       <div class="preview-media-placeholder">No image yet</div>
       {% endif %}
     </div>
-    {% if preview_urls|length > 1 %}
-    <div class="preview-carousel-strip" id="preview-carousel-strip">
-      {% for url in preview_urls %}
-      <button type="button" class="preview-carousel-strip-item{% if forloop.first %} is-active{% endif %}" data-index="{{ forloop.counter0 }}" aria-label="Slide {{ forloop.counter }}">
-        <img src="{{ url }}" alt="">
-      </button>
-      {% endfor %}
-    </div>
-    {% endif %}
 
     <div class="social-preview-text">
       {% if post.caption %}
@@ -77,74 +63,4 @@
     </p>
   </div>
 </div>
-{{ preview_urls|json_script:"preview-urls" }}
-{% endblock %}
-
-{% block extra_js %}
-{% if preview_urls|length > 1 %}
-<script>
-(function () {
-  var urls = [];
-  try {
-    urls = JSON.parse(document.getElementById('preview-urls').textContent) || [];
-  } catch (err) {
-    urls = [];
-  }
-  if (urls.length < 2) return;
-
-  var index = 0;
-  var img = document.getElementById('preview-image');
-  var prev = document.getElementById('preview-carousel-prev');
-  var next = document.getElementById('preview-carousel-next');
-  var dots = document.getElementById('preview-carousel-dots');
-  var count = document.getElementById('preview-carousel-count');
-  var strip = document.getElementById('preview-carousel-strip');
-
-  function render() {
-    if (img) {
-      img.src = urls[index];
-      img.alt = 'Carousel slide ' + (index + 1) + ' of ' + urls.length;
-    }
-    if (count) count.textContent = (index + 1) + ' / ' + urls.length;
-    if (dots) {
-      dots.innerHTML = '';
-      urls.forEach(function (_, i) {
-        var dot = document.createElement('button');
-        dot.type = 'button';
-        dot.className = 'preview-carousel-dot' + (i === index ? ' is-active' : '');
-        dot.setAttribute('aria-label', 'Slide ' + (i + 1));
-        dot.addEventListener('click', function () {
-          index = i;
-          render();
-        });
-        dots.appendChild(dot);
-      });
-    }
-    if (strip) {
-      strip.querySelectorAll('.preview-carousel-strip-item').forEach(function (btn, i) {
-        btn.classList.toggle('is-active', i === index);
-      });
-    }
-  }
-
-  if (prev) prev.addEventListener('click', function () {
-    index = (index - 1 + urls.length) % urls.length;
-    render();
-  });
-  if (next) next.addEventListener('click', function () {
-    index = (index + 1) % urls.length;
-    render();
-  });
-  if (strip) {
-    strip.querySelectorAll('.preview-carousel-strip-item').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        index = parseInt(btn.getAttribute('data-index'), 10) || 0;
-        render();
-      });
-    });
-  }
-  render();
-})();
-</script>
-{% endif %}
 {% endblock %}

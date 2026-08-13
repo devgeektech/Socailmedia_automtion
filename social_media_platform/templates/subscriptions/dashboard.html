@@ -141,22 +141,7 @@
       {% for post in posts %}
       <article class="glass-card social-post-card" data-status="{{ post.status }}">
         <div class="social-post-image">
-            {% if post.media_type == 'carousel' and post.media_items.exists %}
-                {% with slides=post.ordered_media %}
-                <div class="dashboard-carousel-preview" data-carousel>
-                  {% for item in slides %}
-                    {% if item.resolve_image_url %}
-                    <img src="{{ item.resolve_image_url }}" alt="{{ post.caption }}" {% if not forloop.first %}hidden{% endif %} data-slide>
-                    {% endif %}
-                  {% endfor %}
-                  {% if slides|length > 1 %}
-                  <button type="button" class="dashboard-carousel-nav prev" data-carousel-prev aria-label="Previous">‹</button>
-                  <button type="button" class="dashboard-carousel-nav next" data-carousel-next aria-label="Next">›</button>
-                  <span class="dashboard-carousel-count">{{ slides|length }}</span>
-                  {% endif %}
-                </div>
-                {% endwith %}
-            {% elif post.image %}
+            {% if post.image %}
                 <img src="{{ post.image.url }}" alt="{{ post.caption }}">
             {% elif post.video %}
                 <div class="no-image"><span>▶</span></div>
@@ -166,7 +151,7 @@
                 </div>
             {% endif %}
             {% if post.media_type == 'carousel' %}
-            <span class="media-type-badge">Carousel</span>
+            <span class="media-type-badge">{{ post.media_items.count }} photos</span>
             {% elif post.media_type == 'video' %}
             <span class="media-type-badge">Video</span>
             {% endif %}

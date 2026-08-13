@@ -79,6 +79,7 @@ def _apply_media_from_form(request, post, form):
     from .media_utils import (
         attach_carousel_from_assets,
         attach_single_image_asset,
+        clear_post_media,
         kind_from_name,
         merge_image_assets,
         parse_asset_ids,
@@ -124,6 +125,15 @@ def _apply_media_from_form(request, post, form):
             attach_single_image_asset(post, combined[0])
         else:
             attach_carousel_from_assets(post, combined)
+        return
+
+    if (request.POST.get('replace_existing_media') or '').strip() == '1':
+        clear_post_media(post)
+        if post.image:
+            post.image.delete(save=False)
+            post.image = None
+        post.media_type = Post.MEDIA_IMAGE
+        post.save(update_fields=['image', 'media_type', 'updated_at'])
         return
 
     if not post.image and not post.media_items.exists():
@@ -249,17 +259,22 @@ def _post_form_context(request, form, *, is_edit, post=None, page_title='Create 
     if post is not None:
         ctx['post'] = post
         ctx['is_draft'] = post.status == Post.STATUS_DRAFT
-        preview_urls = []
+        preview_items = []
         for item in post.ordered_media():
             url = item.resolve_image_url()
             if url:
-                preview_urls.append(url)
-        if not preview_urls and post.image:
-            preview_urls.append(post.image.url)
-        ctx['existing_preview_urls'] = preview_urls
+                preview_items.append({
+                    'url': url,
+                    'asset_id': item.asset_id or 0,
+                })
+        if not preview_items and post.image:
+            preview_items.append({'url': post.image.url, 'asset_id': 0})
+        ctx['existing_preview_urls'] = [x['url'] for x in preview_items]
+        ctx['existing_preview_items'] = preview_items
     else:
         ctx['is_draft'] = False
         ctx['existing_preview_urls'] = []
+        ctx['existing_preview_items'] = []
     return ctx
 
 
