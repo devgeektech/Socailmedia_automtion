@@ -61,14 +61,14 @@
         </div>
       </div>
 
-      {% comment %} <div class="form-group">
+      <div class="form-group">
         <label class="form-label">From your gallery</label>
         <p class="platform-note" style="margin-bottom:0.65rem;">Add photos from your phone or computer. You can pick several to share together.</p>
         <input type="file" name="carousel_files" id="id_carousel_files" class="glass-input" accept="image/*" multiple>
         <div class="gallery-upload-thumbs" id="gallery-upload-thumbs" hidden></div>
-      </div> {% endcomment %}
+      </div>
 
-      <div class="form-group">
+      {% comment %} <div class="form-group">
         <label class="form-label">Saved photos</label>
         <p class="platform-note" style="margin-bottom:0.65rem;">Use photos you’ve already saved. Tap more than one to include them in the same post. <a href="{% url 'posts:media_library' %}">Browse saved photos</a></p>
         {% if library_assets %}
@@ -88,7 +88,7 @@
           {{ form.regenerate_image }} {{ form.regenerate_image.label }}
         </label>
         {% endif %}
-      </div>
+      </div> {% endcomment %}
 
       <fieldset class="publish-fieldset">
         <legend class="form-label">Publishing</legend>

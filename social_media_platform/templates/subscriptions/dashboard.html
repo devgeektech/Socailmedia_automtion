@@ -13,7 +13,7 @@
     </div>
     <div class="dashboard-actions">
       <a href="{% url 'posts:create' %}" class="btn-primary">Add Post</a>
-      <a href="{% url 'posts:media_library' %}" class="btn-secondary">Media Library</a>
+      {% comment %} <a href="{% url 'posts:media_library' %}" class="btn-secondary">Media Library</a> {% endcomment %}
       <a href="{% url 'subscriptions:plans' %}" class="btn-secondary">Change Plan</a>
       <form method="post" action="{% url 'accounts:logout' %}" style="display:inline;">
         {% csrf_token %}

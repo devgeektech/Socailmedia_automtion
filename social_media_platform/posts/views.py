@@ -409,57 +409,57 @@ def post_duplicate_view(request, pk):
     return redirect('posts:edit', pk=clone.pk)
 
 
-@subscription_required
-def media_library_view(request):
-    from .models import MediaAsset
+# @subscription_required
+# def media_library_view(request):
+#     from .models import MediaAsset
 
-    assets = MediaAsset.objects.filter(user=request.user, kind=MediaAsset.KIND_IMAGE)
+#     assets = MediaAsset.objects.filter(user=request.user, kind=MediaAsset.KIND_IMAGE)
 
-    return render(request, 'posts/media_library.html', {
-        'subscription': request.subscription,
-        'assets': assets[:120],
-    })
-
-
-@subscription_required
-@require_POST
-def media_upload_view(request):
-    from .media_utils import kind_from_name, save_upload_to_library
-    from .models import MediaAsset
-
-    files = request.FILES.getlist('files') or ([request.FILES['file']] if request.FILES.get('file') else [])
-    if not files:
-        messages.error(request, 'Choose at least one image to upload.')
-        return redirect('posts:media_library')
-
-    saved = 0
-    skipped = 0
-    for f in files[:20]:
-        if kind_from_name(f.name) != MediaAsset.KIND_IMAGE:
-            skipped += 1
-            continue
-        save_upload_to_library(request.user, f)
-        saved += 1
-    if saved:
-        messages.success(request, f'Added {saved} image{"s" if saved != 1 else ""} to your media library.')
-    if skipped:
-        messages.warning(request, 'Video uploads are disabled for now — only images were saved.')
-    if not saved and not skipped:
-        messages.error(request, 'No images were uploaded.')
-    return redirect('posts:media_library')
+#     return render(request, 'posts/media_library.html', {
+#         'subscription': request.subscription,
+#         'assets': assets[:120],
+#     })
 
 
-@subscription_required
-@require_POST
-def media_delete_view(request, pk):
-    from .models import MediaAsset
+# @subscription_required
+# @require_POST
+# def media_upload_view(request):
+#     from .media_utils import kind_from_name, save_upload_to_library
+#     from .models import MediaAsset
 
-    asset = get_object_or_404(MediaAsset, pk=pk, user=request.user)
-    if asset.file:
-        asset.file.delete(save=False)
-    asset.delete()
-    messages.success(request, 'Removed from media library.')
-    return redirect('posts:media_library')
+#     files = request.FILES.getlist('files') or ([request.FILES['file']] if request.FILES.get('file') else [])
+#     if not files:
+#         messages.error(request, 'Choose at least one image to upload.')
+#         return redirect('posts:media_library')
+
+#     saved = 0
+#     skipped = 0
+#     for f in files[:20]:
+#         if kind_from_name(f.name) != MediaAsset.KIND_IMAGE:
+#             skipped += 1
+#             continue
+#         save_upload_to_library(request.user, f)
+#         saved += 1
+#     if saved:
+#         messages.success(request, f'Added {saved} image{"s" if saved != 1 else ""} to your media library.')
+#     if skipped:
+#         messages.warning(request, 'Video uploads are disabled for now — only images were saved.')
+#     if not saved and not skipped:
+#         messages.error(request, 'No images were uploaded.')
+#     return redirect('posts:media_library')
+
+
+# @subscription_required
+# @require_POST
+# def media_delete_view(request, pk):
+#     from .models import MediaAsset
+
+#     asset = get_object_or_404(MediaAsset, pk=pk, user=request.user)
+#     if asset.file:
+#         asset.file.delete(save=False)
+#     asset.delete()
+#     messages.success(request, 'Removed from media library.')
+#     return redirect('posts:media_library')
 
 
 @subscription_required
