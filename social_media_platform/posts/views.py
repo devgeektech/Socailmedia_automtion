@@ -181,6 +181,7 @@ def _handle_post_submit(request, form, *, post=None):
         if isinstance(exc, MetaAPIError):
             from .meta import friendly_user_error
 
+            logger.warning('Publish failed: %s', exc)
             messages.error(request, friendly_user_error(exc))
             return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
         raise
@@ -557,6 +558,7 @@ def publish_platform_view(request, pk):
         else:
             from .meta import friendly_user_error
 
+            logger.warning('Platform publish failed: %s', exc)
             messages.error(request, friendly_user_error(exc))
             if post.status == Post.STATUS_SCHEDULED:
                 Post.objects.filter(pk=post.pk).update(status=Post.STATUS_FAILED)

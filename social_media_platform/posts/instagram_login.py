@@ -345,9 +345,9 @@ def publish_instagram_login_carousel(
     image_urls: list[str],
     caption: str,
 ) -> str:
-    """Publish an Instagram carousel (2–10 images)."""
+    """Publish an Instagram multi-photo post (2–10 images)."""
     if len(image_urls) < 2:
-        raise MetaAPIError('Instagram carousel needs at least 2 images.')
+        raise MetaAPIError('Instagram multi-photo post needs at least 2 images.')
     if len(image_urls) > 10:
         image_urls = image_urls[:10]
 
@@ -364,11 +364,13 @@ def publish_instagram_login_carousel(
                 },
             )
             created = resp.json()
-            _raise_for_graph(created, fallback='Instagram carousel item create failed')
+            _raise_for_graph(created, fallback='Instagram multi-photo item create failed')
             cid = created.get('id')
             if not cid:
-                raise MetaAPIError('Instagram did not return a carousel item id.')
+                raise MetaAPIError('Instagram did not return a photo item id.')
             child_ids.append(str(cid))
+            # Meta requires each child container to finish before creating the parent.
+            _wait_for_ig_login_container(str(cid), access_token, attempts=24)
 
     children = ','.join(child_ids)
     with httpx.Client(timeout=60.0) as client:
@@ -382,25 +384,34 @@ def publish_instagram_login_carousel(
             },
         )
         parent = resp.json()
-    _raise_for_graph(parent, fallback='Instagram carousel create failed')
+    _raise_for_graph(parent, fallback='Instagram multi-photo create failed')
     creation_id = parent.get('id')
     if not creation_id:
-        raise MetaAPIError('Instagram did not return a carousel creation id.')
+        raise MetaAPIError('Instagram did not return a multi-photo creation id.')
 
     _wait_for_ig_login_container(str(creation_id), access_token, attempts=24)
 
-    published = _publish_container(
-        ig_user_id=ig_user_id,
-        access_token=access_token,
-        creation_id=str(creation_id),
-    )
+    published = {}
+    for attempt in range(20):
+        published = _publish_container(
+            ig_user_id=ig_user_id,
+            access_token=access_token,
+            creation_id=str(creation_id),
+        )
+        err = published.get('error') if isinstance(published, dict) else None
+        if err and err.get('code') == 9007:
+            logger.info('Instagram multi-photo still processing (9007) attempt %s', attempt + 1)
+            time.sleep(4)
+            continue
+        break
+
     err = published.get('error') if isinstance(published, dict) else None
     if err and err.get('code') == 9007:
         raise InstagramStillProcessing('instagram_still_processing')
-    _raise_for_graph(published, fallback='Instagram carousel publish failed')
+    _raise_for_graph(published, fallback='Instagram multi-photo publish failed')
     media_id = published.get('id')
     if not media_id:
-        raise MetaAPIError('Instagram carousel publish succeeded but no media id was returned.')
+        raise MetaAPIError('Instagram multi-photo publish succeeded but no media id was returned.')
     return str(media_id)
 
 

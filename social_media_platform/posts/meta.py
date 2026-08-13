@@ -29,25 +29,51 @@ class MetaAPIError(Exception):
 
 def friendly_user_error(exc: Exception) -> str:
     """Map technical publish/connect errors to short user-facing copy."""
+    import re
+
     text = str(exc or '').strip()
-    lower = text.lower()
     if not text:
         return 'Something went wrong. Please try again.'
+
+    # Prefer Meta's human message when present; drop trailing "(code 123)".
+    cleaned = re.sub(r'\s*\(code\s*\d+\)\s*$', '', text, flags=re.IGNORECASE).strip()
+    lower = cleaned.lower()
+
     if '9007' in lower or 'media id is not available' in lower or 'not ready' in lower:
         return 'Your post is being published. It should appear shortly.'
-    if 'public_base_url' in lower or ('https' in lower and ('image' in lower or 'video' in lower)):
-        return 'We could not reach this media publicly. Check PUBLIC_BASE_URL and try again.'
+    if (
+        'public_base_url' in lower
+        or 'public https' in lower
+        or ('https' in lower and 'instagram' in lower and ('image' in lower or 'video' in lower or 'photo' in lower))
+    ):
+        return (
+            'Instagram needs a public https link to your photos. '
+            'Set PUBLIC_BASE_URL to a public https address (for example an ngrok tunnel), then try again.'
+        )
+    if 'image file not found' in lower or 'file not found' in lower:
+        return 'A photo file is missing. Please upload or select your photos again, then retry.'
+    if 'carousel needs' in lower or 'multi-photo post needs' in lower or 'needs at least 2' in lower:
+        return 'Select at least 2 photos to post them together.'
+    if any(x in lower for x in ('session has expired', 'invalid oauth', 'error validating access token', 'code 190', '(#190)')):
+        return 'Your connection expired. Reconnect Facebook/Instagram, then try again.'
+    if any(x in lower for x in ('permission', '(#200)', 'code 200', 'not authorized', 'lacks permission')):
+        return 'Missing permission to post. Reconnect your account and allow posting permissions.'
     if 'not configured' in lower or 'app id' in lower or 'app secret' in lower:
         return 'This connection is not available right now. Please try again later.'
-    if 'oauth' in lower or 'authorization' in lower or 'access token' in lower:
-        return 'Please reconnect your account and try again.'
     if 'connect facebook' in lower:
         return 'Connect Facebook first, then try again.'
     if 'connect instagram' in lower:
         return 'Connect Instagram first, then try again.'
-    if any(token in lower for token in ('code ', 'graph', 'uri', 'token', 'meta ', 'oauth')):
-        return 'Something went wrong while publishing. Please try again.'
-    return text
+    if 'could not process the image' in lower:
+        return 'Instagram could not process one of the photos. Try JPG photos and post again.'
+
+    # Keep readable platform messages (Facebook: … / Instagram: …)
+    if cleaned and len(cleaned) <= 220 and not cleaned.startswith('{'):
+        # Avoid dumping raw OAuth/redirect diagnostics
+        if not any(token in lower for token in ('redirect_uri', 'client_secret', 'appsecret', 'exchange code')):
+            return cleaned
+
+    return 'Something went wrong while publishing. Please try again.'
 
 
 def meta_configured() -> bool:
@@ -342,8 +368,9 @@ def publish_facebook_photo(*, page_id: str, page_token: str, image_path: Path, c
     if not image_path.is_file():
         raise MetaAPIError('Image file not found for Facebook publish.')
     url = f'{graph_base()}/{page_id}/photos'
+    mime = _image_mime(image_path)
     with image_path.open('rb') as fh:
-        files = {'source': (image_path.name, fh, 'image/png')}
+        files = {'source': (image_path.name, fh, mime)}
         data = {'caption': caption, 'access_token': page_token, 'published': 'true'}
         with httpx.Client(timeout=120.0) as client:
             resp = client.post(url, data=data, files=files)
@@ -355,6 +382,17 @@ def publish_facebook_photo(*, page_id: str, page_token: str, image_path: Path, c
     return str(post_id)
 
 
+def _image_mime(path: Path) -> str:
+    ext = path.suffix.lower()
+    if ext in {'.jpg', '.jpeg'}:
+        return 'image/jpeg'
+    if ext == '.webp':
+        return 'image/webp'
+    if ext == '.gif':
+        return 'image/gif'
+    return 'image/png'
+
+
 def publish_facebook_carousel(
     *,
     page_id: str,
@@ -363,39 +401,45 @@ def publish_facebook_carousel(
     caption: str,
 ) -> str:
     """Upload multiple unpublished photos, then publish as one multi-photo feed post."""
-    if len(image_paths) < 2:
+    paths = [Path(p) for p in image_paths if p]
+    if len(paths) < 2:
         raise MetaAPIError('Facebook multi-photo post needs at least 2 images.')
 
     media_fbids: list[str] = []
     url = f'{graph_base()}/{page_id}/photos'
     with httpx.Client(timeout=120.0) as client:
-        for image_path in image_paths[:10]:
+        for image_path in paths[:10]:
             if not image_path.is_file():
                 raise MetaAPIError(f'Image file not found: {image_path.name}')
+            mime = _image_mime(image_path)
             with image_path.open('rb') as fh:
-                files = {'source': (image_path.name, fh, 'image/jpeg')}
+                files = {'source': (image_path.name, fh, mime)}
                 data = {
                     'published': 'false',
+                    'temporary': 'true',
                     'access_token': page_token,
                 }
                 resp = client.post(url, data=data, files=files)
                 result = resp.json()
-            _raise_for_graph(result, fallback='Facebook carousel photo upload failed')
+            logger.info('Facebook unpublished photo upload status=%s body_keys=%s', resp.status_code, list(result) if isinstance(result, dict) else type(result))
+            _raise_for_graph(result, fallback='Facebook multi-photo upload failed')
             mid = result.get('id')
             if not mid:
-                raise MetaAPIError('Facebook did not return a photo id for carousel item.')
+                raise MetaAPIError('Facebook did not return a photo id for multi-photo item.')
             media_fbids.append(str(mid))
 
     feed_url = f'{graph_base()}/{page_id}/feed'
-    attached = {f'attached_media[{i}]': f'{{"media_fbid":"{mid}"}}' for i, mid in enumerate(media_fbids)}
+    # Graph expects attached_media[n] as a JSON object string: {"media_fbid":"..."}
     data = {
         'message': caption,
         'access_token': page_token,
-        **attached,
     }
+    for i, mid in enumerate(media_fbids):
+        data[f'attached_media[{i}]'] = f'{{"media_fbid":"{mid}"}}'
     with httpx.Client(timeout=60.0) as client:
         resp = client.post(feed_url, data=data)
         published = resp.json()
+    logger.info('Facebook multi-photo feed status=%s', resp.status_code)
     _raise_for_graph(published, fallback='Facebook multi-photo publish failed')
     post_id = published.get('id')
     if not post_id:

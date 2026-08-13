@@ -131,14 +131,16 @@ class Post(models.Model):
         return self.media_items.select_related('asset').order_by('order', 'id')
 
     def carousel_image_paths(self):
-        """Absolute filesystem paths for carousel images (cover first if needed)."""
+        """Absolute filesystem paths for multi-photo slides (cover first if needed)."""
+        from pathlib import Path
+
         paths = []
         for item in self.ordered_media():
             path = item.resolve_image_path()
             if path:
-                paths.append(path)
+                paths.append(Path(path))
         if not paths and self.image:
-            paths.append(self.image.path)
+            paths.append(Path(self.image.path))
         return paths
 
     def sync_media_type(self):
