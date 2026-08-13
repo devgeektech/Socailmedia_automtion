@@ -28,19 +28,30 @@ class MetaAPIError(Exception):
 
 
 def friendly_user_error(exc: Exception) -> str:
-    """Map technical publish/connect errors to short user-facing copy."""
+    """Map technical publish/connect errors to short English user-facing copy.
+
+    Never surface Meta's localized/raw Graph messages to the UI.
+    """
     import re
 
     text = str(exc or '').strip()
     if not text:
         return 'Something went wrong. Please try again.'
 
-    # Prefer Meta's human message when present; drop trailing "(code 123)".
     cleaned = re.sub(r'\s*\(code\s*\d+\)\s*$', '', text, flags=re.IGNORECASE).strip()
-    lower = cleaned.lower()
+    # Strip platform prefixes for matching
+    bare = re.sub(r'^(facebook|instagram)\s*:\s*', '', cleaned, flags=re.IGNORECASE).strip()
+    lower = f'{cleaned} {bare}'.lower()
+    # Non-Latin scripts (e.g. Punjabi/Gurmukhi Meta locale messages)
+    has_non_latin = bool(re.search(r'[^\x00-\x7F]', cleaned))
 
     if '9007' in lower or 'media id is not available' in lower or 'not ready' in lower:
         return 'Your post is being published. It should appear shortly.'
+    if 'aspect ratio' in lower or 'aspect_ratio' in lower or 'ਆਕਾਰ ਅਨੁਪਾਤ' in cleaned:
+        return (
+            'Instagram rejected a photo because of its shape. '
+            'Try publishing again - photos are now auto-adjusted to fit Instagram.'
+        )
     if (
         'public_base_url' in lower
         or 'public https' in lower
@@ -64,14 +75,22 @@ def friendly_user_error(exc: Exception) -> str:
         return 'Connect Facebook first, then try again.'
     if 'connect instagram' in lower:
         return 'Connect Instagram first, then try again.'
-    if 'could not process the image' in lower:
-        return 'Instagram could not process one of the photos. Try JPG photos and post again.'
+    if 'could not process the image' in lower or 'failed to download' in lower:
+        return 'Instagram could not process one of the photos. Please try again with a different photo.'
 
-    # Keep readable platform messages (Facebook: … / Instagram: …)
-    if cleaned and len(cleaned) <= 220 and not cleaned.startswith('{'):
-        # Avoid dumping raw OAuth/redirect diagnostics
-        if not any(token in lower for token in ('redirect_uri', 'client_secret', 'appsecret', 'exchange code')):
-            return cleaned
+    # Never show Meta locale/raw strings (non-English Graph copy)
+    if has_non_latin:
+        return 'Instagram could not publish this photo. Please try again with a different photo.'
+
+    if bare and len(bare) <= 180 and bare.isascii() and not any(
+        token in lower for token in ('redirect_uri', 'client_secret', 'appsecret', 'exchange code', 'oauth')
+    ):
+        # Only allow short plain English app messages we raised ourselves
+        if any(bare.lower().startswith(p) for p in (
+            'connect ', 'select ', 'an image', 'a photo', 'a video', 'pick ', 'facebook ', 'instagram ',
+            'missing ', 'your connection', 'this connection', 'the photo', 'a photo file',
+        )):
+            return bare
 
     return 'Something went wrong while publishing. Please try again.'
 

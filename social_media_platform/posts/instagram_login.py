@@ -286,6 +286,69 @@ def publish_instagram_login_photo(*, ig_user_id: str, access_token: str, image_u
     return str(media_id)
 
 
+# Instagram feed photos must be between 4:5 (portrait) and 1.91:1 (landscape).
+_IG_MIN_ASPECT = 4 / 5
+_IG_MAX_ASPECT = 1.91
+
+
+def _fit_instagram_aspect(img):
+    """Center-crop to a ratio Instagram accepts for feed posts."""
+    width, height = img.size
+    if width < 1 or height < 1:
+        return img
+    ratio = width / height
+    if _IG_MIN_ASPECT <= ratio <= _IG_MAX_ASPECT:
+        return img
+    if ratio < _IG_MIN_ASPECT:
+        # Too tall — crop height to 4:5
+        new_h = max(1, int(round(width / _IG_MIN_ASPECT)))
+        top = max(0, (height - new_h) // 2)
+        return img.crop((0, top, width, top + min(new_h, height - top)))
+    # Too wide — crop width to 1.91:1
+    new_w = max(1, int(round(height * _IG_MAX_ASPECT)))
+    left = max(0, (width - new_w) // 2)
+    return img.crop((left, 0, left + min(new_w, width - left), height))
+
+
+def prepare_instagram_image_file(image_path: Path) -> Path | None:
+    """
+    Return a JPEG path Instagram can publish (valid aspect ratio + RGB JPEG).
+    Always writes under media/posts/ig_ready/.
+    """
+    source = Path(image_path) if image_path else None
+    if not source or not source.is_file():
+        return None
+    try:
+        from PIL import Image, ImageOps
+
+        out_dir = Path(settings.MEDIA_ROOT) / 'posts' / 'ig_ready'
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f'{uuid.uuid4().hex}.jpg'
+        with Image.open(source) as img:
+            img = ImageOps.exif_transpose(img)
+            rgb = img.convert('RGB')
+            fitted = _fit_instagram_aspect(rgb)
+            # Keep a reasonable publish size without making tiny images
+            max_side = 1920
+            w, h = fitted.size
+            if max(w, h) > max_side:
+                scale = max_side / float(max(w, h))
+                fitted = fitted.resize(
+                    (max(1, int(w * scale)), max(1, int(h * scale))),
+                    Image.Resampling.LANCZOS,
+                )
+            fitted.save(out_path, format='JPEG', quality=92, optimize=True)
+        logger.info(
+            'Prepared Instagram JPEG %s from %s',
+            out_path.name,
+            source.name,
+        )
+        return out_path
+    except Exception:
+        logger.exception('Could not prepare image for Instagram: %s', source)
+        return None
+
+
 def public_image_url_for_instagram(image_url: str) -> str:
     url = absolute_media_url(image_url)
     if (
@@ -302,25 +365,14 @@ def public_image_url_for_instagram(image_url: str) -> str:
 
 def instagram_publish_image_url(image_path: Path, image_url: str) -> str:
     """
-    Instagram fetches the image itself. Prefer a JPEG copy so processing finishes
-    reliably (PNG/OpenAI files often stay IN_PROGRESS and then fail with 9007).
+    Instagram fetches the image itself. Always publish a prepared JPEG with a
+    valid feed aspect ratio so Meta does not reject unusual AI/upload sizes.
     """
     source = Path(image_path) if image_path else None
     publish_rel = image_url
-    if source and source.is_file() and source.suffix.lower() not in {'.jpg', '.jpeg'}:
-        try:
-            from PIL import Image
-
-            out_dir = Path(settings.MEDIA_ROOT) / 'posts' / 'ig_ready'
-            out_dir.mkdir(parents=True, exist_ok=True)
-            out_path = out_dir / f'{uuid.uuid4().hex}.jpg'
-            with Image.open(source) as img:
-                rgb = img.convert('RGB')
-                rgb.save(out_path, format='JPEG', quality=90)
-            publish_rel = f'{settings.MEDIA_URL.rstrip("/")}/posts/ig_ready/{out_path.name}'
-            logger.info('Prepared JPEG for Instagram publish: %s', out_path.name)
-        except Exception:
-            logger.exception('Could not convert image to JPEG for Instagram; using original')
+    prepared = prepare_instagram_image_file(source) if source else None
+    if prepared and prepared.is_file():
+        publish_rel = f'{settings.MEDIA_URL.rstrip("/")}/posts/ig_ready/{prepared.name}'
     return public_image_url_for_instagram(publish_rel)
 
 
