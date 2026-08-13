@@ -42,7 +42,7 @@
 
       <div class="form-group ai-image-group">
         <label class="form-label" for="{{ form.image_prompt.id_for_label }}">{{ form.image_prompt.label }}</label>
-        <p class="platform-note" style="margin-bottom:0.65rem;">Generate 3 options, then select one or more for a single post or carousel.</p>
+        <p class="platform-note" style="margin-bottom:0.65rem;">Describe what you want. We’ll create 3 options — pick one image, or several to post together.</p>
         {{ form.image_prompt }}
         {% if form.image_prompt.errors %}<p class="form-error">{{ form.image_prompt.errors.0 }}</p>{% endif %}
         <div class="ai-image-actions">
@@ -56,31 +56,21 @@
           <span class="ai-status" id="ai-status" aria-live="polite"></span>
         </div>
         <div class="ai-image-picker" id="ai-image-picker" hidden>
-          <p class="platform-note ai-picker-hint">Tap images to select — pick several for a carousel</p>
+          <p class="platform-note ai-picker-hint">Tap to select. Choose more than one to post them as a multi-photo post.</p>
           <div class="ai-image-options" id="ai-image-options"></div>
         </div>
-        {% if is_edit and existing_preview_urls %}
-        <div class="current-image-preview">
-          <p class="platform-note">{% if existing_preview_urls|length > 1 %}Current carousel ({{ existing_preview_urls|length }} images){% else %}Current image{% endif %}</p>
-          <div class="current-carousel-thumbs">
-            {% for url in existing_preview_urls %}
-            <img src="{{ url }}" alt="Slide {{ forloop.counter }}" class="current-post-thumb">
-            {% endfor %}
-          </div>
-        </div>
-        {% endif %}
       </div>
 
       <div class="form-group">
         <label class="form-label">From your gallery</label>
-        <p class="platform-note" style="margin-bottom:0.65rem;">Upload one or more images from your device for a single post or carousel.</p>
+        <p class="platform-note" style="margin-bottom:0.65rem;">Add photos from your phone or computer. You can pick several to share together.</p>
         <input type="file" name="carousel_files" id="id_carousel_files" class="glass-input" accept="image/*" multiple>
         <div class="gallery-upload-thumbs" id="gallery-upload-thumbs" hidden></div>
       </div>
 
       <div class="form-group">
-        <label class="form-label">Media Library</label>
-        <p class="platform-note" style="margin-bottom:0.65rem;">Reuse saved images. Select multiple for a carousel. <a href="{% url 'posts:media_library' %}">Open library</a></p>
+        <label class="form-label">Saved photos</label>
+        <p class="platform-note" style="margin-bottom:0.65rem;">Use photos you’ve already saved. Tap more than one to include them in the same post. <a href="{% url 'posts:media_library' %}">Browse saved photos</a></p>
         {% if library_assets %}
         <div class="library-picker" id="library-picker">
           {% for asset in library_assets %}
@@ -91,7 +81,7 @@
         </div>
         <p class="platform-note" id="library-pick-status" aria-live="polite"></p>
         {% else %}
-        <p class="platform-note">No saved images yet — generate or upload above.</p>
+        <p class="platform-note">No saved photos yet — generate or upload above.</p>
         {% endif %}
         {% if is_edit %}
         <label class="clear-media" style="margin-top:0.85rem;">
@@ -229,7 +219,7 @@
           </div>
         </div>
         <div class="social-preview-media{% if is_edit and post.image %} has-image{% endif %}" id="preview-media">
-          <div class="preview-media-placeholder" id="preview-placeholder" {% if is_edit and post.image %}hidden{% endif %}>Image / carousel preview</div>
+          <div class="preview-media-placeholder" id="preview-placeholder" {% if is_edit and post.image %}hidden{% endif %}>Your photos will appear here</div>
           <div class="preview-carousel" id="preview-carousel" {% if not is_edit or not post.image %}hidden{% endif %}>
             <button type="button" class="preview-carousel-nav preview-carousel-prev" id="preview-carousel-prev" aria-label="Previous" hidden>‹</button>
             <img
@@ -577,8 +567,8 @@
 
     previewImage.src = carouselUrls[carouselIndex] || carouselUrls[0];
     previewImage.alt = multi
-      ? ('Carousel slide ' + (carouselIndex + 1) + ' of ' + carouselUrls.length)
-      : 'Post image';
+      ? ('Photo ' + (carouselIndex + 1) + ' of ' + carouselUrls.length)
+      : 'Post photo';
     setHidden(previewImage, false);
     previewImage.style.display = 'block';
 
@@ -686,9 +676,9 @@
     if (regenerate) regenerate.checked = selectedAi.length > 0;
     rebuildPreviewFromSelections();
     if (aiStatus) {
-      if (!selectedAi.length) aiStatus.textContent = 'Select one or more images.';
-      else if (selectedAi.length === 1) aiStatus.textContent = '1 image selected.';
-      else aiStatus.textContent = selectedAi.length + ' images selected — swipe preview carousel.';
+      if (!selectedAi.length) aiStatus.textContent = 'Select one or more photos.';
+      else if (selectedAi.length === 1) aiStatus.textContent = '1 photo selected.';
+      else aiStatus.textContent = selectedAi.length + ' photos selected — check the preview on the right.';
     }
   }
 
@@ -1010,7 +1000,7 @@
           }
           renderOptions(imgs);
           rebuildPreviewFromSelections();
-          if (aiStatus) aiStatus.textContent = 'Images ready — select one or more.';
+          if (aiStatus) aiStatus.textContent = 'Photos ready — select one or more.';
         })
         .catch(function (err) {
           if (picker) picker.hidden = true;
@@ -1071,8 +1061,8 @@
       }
       if (libraryStatus) {
         if (!selectedLibrary.length) libraryStatus.textContent = '';
-        else if (selectedLibrary.length === 1) libraryStatus.textContent = 'Selected 1 image from library.';
-        else libraryStatus.textContent = 'Selected ' + selectedLibrary.length + ' images for carousel.';
+        else if (selectedLibrary.length === 1) libraryStatus.textContent = 'Selected 1 saved photo.';
+        else libraryStatus.textContent = 'Selected ' + selectedLibrary.length + ' photos for this post.';
       }
       if (libraryIds) libraryIds.value = selectedLibrary.join(',');
       rebuildPreviewFromSelections();

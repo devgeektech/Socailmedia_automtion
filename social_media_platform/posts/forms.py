@@ -171,7 +171,7 @@ class PostForm(forms.ModelForm):
         if not self._has_media(cleaned):
             self.add_error(
                 'image_prompt',
-                'Add media: generate AI images (select one or more), pick from the library, or upload from your gallery.',
+                'Add photos: generate with AI, pick from saved photos, or upload from your device.',
             )
 
         from .meta import facebook_publish_ready, instagram_publish_ready

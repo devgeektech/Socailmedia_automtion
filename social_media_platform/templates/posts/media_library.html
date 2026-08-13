@@ -19,7 +19,7 @@
 
   <div class="glass-card">
     <h2 class="posts-section-title" style="margin-bottom:0.75rem;">Upload</h2>
-    <p class="platform-note" style="margin-bottom:1rem;">Store images to reuse across posts, carousels, and schedules.</p>
+    <p class="platform-note" style="margin-bottom:1rem;">Save photos here so you can reuse them in future posts.</p>
     <form method="post" action="{% url 'posts:media_upload' %}" enctype="multipart/form-data" class="media-upload-form">
       {% csrf_token %}
       <input type="file" name="files" class="glass-input" accept="image/*" multiple required>
