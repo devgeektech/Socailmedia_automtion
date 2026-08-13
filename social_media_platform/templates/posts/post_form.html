@@ -41,29 +41,83 @@
         {% if form.caption.errors %}<p class="form-error">{{ form.caption.errors.0 }}</p>{% endif %}
       </div>
 
-      <div class="form-group ai-image-group">
-        <label class="form-label" for="{{ form.image_prompt.id_for_label }}">{{ form.image_prompt.label }}</label>
-        <p class="platform-note" style="margin-bottom:0.65rem;">Describe what you want. We’ll create 3 options — pick one or more, then check the live preview.</p>
-        {{ form.image_prompt }}
-        {% if form.image_prompt.errors %}<p class="form-error">{{ form.image_prompt.errors.0 }}</p>{% endif %}
-        <div class="ai-image-actions">
-          <button type="button" class="btn-secondary" id="btn-generate-image">
-            <span class="gen-btn-label" id="gen-btn-label">Generate images</span>
-            <span class="gen-btn-loading" id="gen-btn-loading" hidden>
-              <span class="ai-spinner" aria-hidden="true"></span>
-              Loading…
-            </span>
-          </button>
-          <span class="ai-status" id="ai-status" aria-live="polite"></span>
-        </div>
-      </div>
-      <div class="form-group photo-source-group">
+      <div class="form-group photo-add-group">
         <label class="form-label">Photos</label>
-        <p class="platform-note" style="margin-bottom:0.75rem;">Upload from your device or select a file from your previous uploads.</p>
-        <div class="photo-source-actions">
-          <button type="button" class="btn-secondary photo-source-btn" id="btn-upload-photos">Upload from device</button>
-          <button type="button" class="btn-secondary photo-source-btn" id="btn-choose-saved"{% if not has_library_photos and not library_assets %} disabled title="No saved photos yet"{% endif %}>Choose saved photos</button>
+        <p class="platform-note photo-chooser-lead" id="photo-chooser-lead">Choose one way to add photos. You can add more after.</p>
+
+        <div class="photo-chooser" id="photo-chooser">
+          <div class="photo-chooser-grid">
+            <button type="button" class="photo-choice" id="photo-choice-device" data-source="device">
+              <span class="photo-choice-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="4" width="18" height="14" rx="2"></rect>
+                  <circle cx="8.5" cy="9.5" r="1.5"></circle>
+                  <path d="M21 15l-5-5-7 7-3-3-3 3"></path>
+                </svg>
+              </span>
+              <strong>From your device</strong>
+              <small>Phone or computer</small>
+            </button>
+            <button type="button" class="photo-choice" id="photo-choice-ai" data-source="ai">
+              <span class="photo-choice-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3l1.2 3.6L17 8l-3.8 1.4L12 13l-1.2-3.6L7 8l3.8-1.4L12 3z"></path>
+                  <path d="M5 16l.7 2 2 .7-2 .7L5 21l-.7-2-2-.7 2-.7L5 16z"></path>
+                  <path d="M19 14l.6 1.6L21 16l-1.4.4L19 18l-.6-1.6L17 16l1.4-.4L19 14z"></path>
+                </svg>
+              </span>
+              <strong>Create with AI</strong>
+              <small>Describe what you want</small>
+            </button>
+            <button type="button" class="photo-choice" id="photo-choice-library" data-source="library"{% if not has_library_photos and not library_assets %} disabled{% endif %}>
+              <span class="photo-choice-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 6h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"></path>
+                  <path d="M8 6V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2h-1"></path>
+                </svg>
+              </span>
+              <strong>Saved photos</strong>
+              <small>{% if has_library_photos or library_assets %}Pick from earlier uploads{% else %}None saved yet{% endif %}</small>
+            </button>
+          </div>
         </div>
+
+        <div class="photo-panel" id="photo-panel-device" hidden>
+          <div class="photo-panel-bar">
+            <p>Pick one or more photos from your phone or computer.</p>
+            <button type="button" class="photo-change-source">Change</button>
+          </div>
+          <button type="button" class="btn-secondary photo-source-btn" id="btn-upload-photos">Choose files</button>
+        </div>
+
+        <div class="photo-panel" id="photo-panel-ai" hidden>
+          <div class="photo-panel-bar">
+            <p>Describe what you want. We’ll create a few options for you to choose from.</p>
+            <button type="button" class="photo-change-source">Change</button>
+          </div>
+          <label class="form-label" for="{{ form.image_prompt.id_for_label }}">{{ form.image_prompt.label }}</label>
+          {{ form.image_prompt }}
+          {% if form.image_prompt.errors %}<p class="form-error">{{ form.image_prompt.errors.0 }}</p>{% endif %}
+          <div class="ai-image-actions">
+            <button type="button" class="btn-secondary" id="btn-generate-image">
+              <span class="gen-btn-label" id="gen-btn-label">Generate images</span>
+              <span class="gen-btn-loading" id="gen-btn-loading" hidden>
+                <span class="ai-spinner" aria-hidden="true"></span>
+                Loading…
+              </span>
+            </button>
+            <span class="ai-status" id="ai-status" aria-live="polite"></span>
+          </div>
+        </div>
+
+        <div class="photo-panel" id="photo-panel-library" hidden>
+          <div class="photo-panel-bar">
+            <p>Pick one or more photos you’ve saved before.</p>
+            <button type="button" class="photo-change-source">Change</button>
+          </div>
+          <button type="button" class="btn-secondary photo-source-btn" id="btn-choose-saved">Browse saved photos</button>
+        </div>
+
         <input type="file" name="carousel_files" id="id_carousel_files" class="photo-file-input" accept="image/*" multiple>
         <div id="gallery-upload-thumbs" hidden></div>
         <p class="platform-note" id="library-pick-status" aria-live="polite" hidden data-empty=""></p>
@@ -224,7 +278,7 @@
     <div class="media-picker-header">
       <div>
         <h2 class="media-picker-title" id="ai-picker-title">Choose AI photos</h2>
-        <p class="platform-note">Tap to select. Your choices appear in the live preview.</p>
+        <p class="platform-note">Tap to select one or more photos.</p>
       </div>
       <button type="button" class="btn-secondary btn-sm js-ai-picker-close" aria-label="Close">Close</button>
     </div>
@@ -245,12 +299,8 @@
       </div>
       <button type="button" class="btn-secondary btn-sm js-media-picker-close" aria-label="Close">Close</button>
     </div>
-    <div class="media-picker-toolbar">
-      <label class="media-picker-search-label" for="media-picker-search">Search</label>
-      <input type="search" id="media-picker-search" class="glass-input media-picker-search" placeholder="Search by file name…" autocomplete="off">
-    </div>
     <div class="media-picker-grid" id="media-picker-grid" aria-live="polite"></div>
-    <p class="platform-note media-picker-empty" id="media-picker-empty" hidden>No photos match that search.</p>
+    <p class="platform-note media-picker-empty" id="media-picker-empty" hidden>No saved photos yet.</p>
     <div class="media-picker-footer">
       <button type="button" class="btn-secondary" id="media-picker-load-more" hidden>Load more</button>
       <button type="button" class="btn-primary" id="media-picker-done" style="width:auto;">Done</button>
@@ -907,8 +957,8 @@
     rebuildPreviewFromSelections();
     if (aiStatus) {
       if (!selectedAi.length) aiStatus.textContent = 'Select one or more photos.';
-      else if (selectedAi.length === 1) aiStatus.textContent = '1 photo selected — see live preview.';
-      else aiStatus.textContent = selectedAi.length + ' photos selected — see live preview.';
+      else if (selectedAi.length === 1) aiStatus.textContent = '1 photo selected.';
+      else aiStatus.textContent = selectedAi.length + ' photos selected.';
     }
   }
 
@@ -1234,7 +1284,7 @@
             throw new Error('No images returned.');
           }
           renderOptions(imgs);
-          if (aiStatus) aiStatus.textContent = 'Pick photos in the popup — they show in the preview.';
+          if (aiStatus) aiStatus.textContent = 'Photos ready — pick one or more.';
         })
         .catch(function (err) {
           closeAiPicker();
@@ -1309,8 +1359,8 @@
       });
       syncGeneratedPaths();
       if (aiStatus) {
-        if (selectedAi.length === 1) aiStatus.textContent = '1 photo selected — see live preview.';
-        else aiStatus.textContent = selectedAi.length + ' photos selected — see live preview.';
+        if (selectedAi.length === 1) aiStatus.textContent = '1 photo selected.';
+        else aiStatus.textContent = selectedAi.length + ' photos selected.';
       }
     }
   })();
@@ -1321,14 +1371,11 @@
   var pickerGrid = document.getElementById('media-picker-grid');
   var pickerEmpty = document.getElementById('media-picker-empty');
   var pickerCount = document.getElementById('media-picker-count');
-  var pickerSearch = document.getElementById('media-picker-search');
   var pickerLoadMore = document.getElementById('media-picker-load-more');
   var pickerDone = document.getElementById('media-picker-done');
   var pickerPage = 1;
-  var pickerQuery = '';
   var pickerHasMore = false;
   var pickerLoading = false;
-  var pickerSearchTimer = null;
   var PICKER_URL = '{% url "posts:media_picker" %}';
 
   function updatePickerCountLabel(total) {
@@ -1386,7 +1433,6 @@
       pickerLoadMore.textContent = 'Loading…';
     }
     var url = PICKER_URL + '?page=' + encodeURIComponent(page) + '&page_size=24';
-    if (pickerQuery) url += '&q=' + encodeURIComponent(pickerQuery);
 
     fetch(url, {
       credentials: 'same-origin',
@@ -1405,9 +1451,7 @@
         if (pickerEmpty) {
           pickerEmpty.hidden = !!(data.items && data.items.length) || !!(append && pickerGrid && pickerGrid.children.length);
           if (!(data.items && data.items.length) && !append) {
-            pickerEmpty.textContent = pickerQuery
-              ? 'No photos match that search.'
-              : 'No saved photos yet. Upload from your device first.';
+            pickerEmpty.textContent = 'No saved photos yet. Upload from your device first.';
           }
         }
         if (pickerLoadMore) {
@@ -1436,11 +1480,8 @@
     if (!pickerModal) return;
     pickerModal.hidden = false;
     document.body.classList.add('media-picker-open');
-    pickerQuery = '';
-    if (pickerSearch) pickerSearch.value = '';
     pickerPage = 1;
     loadPickerPage(1, false);
-    if (pickerSearch) setTimeout(function () { pickerSearch.focus(); }, 50);
   }
 
   function closeMediaPicker() {
@@ -1460,6 +1501,61 @@
       openMediaPicker();
     });
   }
+
+  (function bindPhotoChooser() {
+    var chooser = document.getElementById('photo-chooser');
+    var lead = document.getElementById('photo-chooser-lead');
+    var panels = {
+      device: document.getElementById('photo-panel-device'),
+      ai: document.getElementById('photo-panel-ai'),
+      library: document.getElementById('photo-panel-library')
+    };
+    var leads = {
+      start: 'Choose one way to add photos. You can add more after.',
+      device: 'Adding from your device',
+      ai: 'Creating photos with AI',
+      library: 'Picking from saved photos'
+    };
+
+    function showPanel(source) {
+      if (chooser) chooser.hidden = true;
+      Object.keys(panels).forEach(function (key) {
+        if (panels[key]) panels[key].hidden = key !== source;
+      });
+      if (lead) lead.textContent = leads[source] || leads.start;
+    }
+
+    function showChooser() {
+      Object.keys(panels).forEach(function (key) {
+        if (panels[key]) panels[key].hidden = true;
+      });
+      if (chooser) chooser.hidden = false;
+      if (lead) lead.textContent = leads.start;
+    }
+
+    document.querySelectorAll('.photo-choice').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if (btn.disabled) return;
+        var source = btn.getAttribute('data-source') || '';
+        showPanel(source);
+        if (source === 'device' && galleryInput) {
+          setTimeout(function () { galleryInput.click(); }, 50);
+        }
+        if (source === 'library') openMediaPicker();
+        if (source === 'ai' && imagePrompt) {
+          setTimeout(function () { imagePrompt.focus(); }, 50);
+        }
+      });
+    });
+
+    document.querySelectorAll('.photo-change-source').forEach(function (btn) {
+      btn.addEventListener('click', showChooser);
+    });
+
+    if (document.querySelector('#photo-panel-ai .form-error')) {
+      showPanel('ai');
+    }
+  })();
   if (pickerModal) {
     pickerModal.querySelectorAll('.js-media-picker-close').forEach(function (el) {
       el.addEventListener('click', closeMediaPicker);
@@ -1470,16 +1566,6 @@
     pickerLoadMore.addEventListener('click', function () {
       if (!pickerHasMore) return;
       loadPickerPage(pickerPage + 1, true);
-    });
-  }
-  if (pickerSearch) {
-    pickerSearch.addEventListener('input', function () {
-      clearTimeout(pickerSearchTimer);
-      pickerSearchTimer = setTimeout(function () {
-        pickerQuery = (pickerSearch.value || '').trim();
-        pickerPage = 1;
-        loadPickerPage(1, false);
-      }, 280);
     });
   }
   document.addEventListener('keydown', function (event) {
