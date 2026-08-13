@@ -502,7 +502,9 @@
   var galleryInput = document.getElementById('id_carousel_files');
   var galleryThumbs = document.getElementById('gallery-upload-thumbs');
   var libraryIds = document.getElementById('id_library_asset_ids');
+  var libraryStatus = document.getElementById('library-pick-status');
   var selectedAi = [];
+  var selectedLibrary = [];
   var existingPreviewItems = [];
   try {
     var existingEl = document.getElementById('existing-preview-items');
@@ -510,6 +512,13 @@
     if (!Array.isArray(existingPreviewItems)) existingPreviewItems = [];
   } catch (err) {
     existingPreviewItems = [];
+  }
+
+  function syncLibraryStatus() {
+    if (!libraryStatus) return;
+    if (!selectedLibrary.length) libraryStatus.textContent = '';
+    else if (selectedLibrary.length === 1) libraryStatus.textContent = 'Selected 1 saved photo.';
+    else libraryStatus.textContent = 'Selected ' + selectedLibrary.length + ' photos for this post.';
   }
 
   function setHidden(el, isHidden) {
@@ -535,30 +544,50 @@
 
   function collectPreviewItems() {
     var items = [];
+    var seenUrls = {};
+
+    function pushItem(item) {
+      if (!item || !item.url || seenUrls[item.url]) return;
+      seenUrls[item.url] = true;
+      items.push(item);
+    }
+
     if (galleryThumbs) {
       galleryThumbs.querySelectorAll('.gallery-upload-thumb').forEach(function (wrap, i) {
         var img = wrap.querySelector('img');
         if (img && img.src) {
-          items.push({ source: 'gallery', id: String(i), url: img.src, name: img.alt || '' });
+          pushItem({ source: 'gallery', id: String(i), url: img.src, name: img.alt || '' });
         }
       });
     }
     document.querySelectorAll('.library-pick.is-selected').forEach(function (btn) {
       var id = String(btn.getAttribute('data-id') || '');
       var u = btn.getAttribute('data-url') || (btn.querySelector('img') && btn.querySelector('img').src);
-      if (u) items.push({ source: 'library', id: id, url: u });
+      if (u) pushItem({ source: 'library', id: id, url: u });
     });
     selectedAi.forEach(function (item) {
-      if (item.url) items.push({ source: 'ai', id: item.path || '', url: item.url });
+      if (item.url) pushItem({ source: 'ai', id: item.path || '', url: item.url });
     });
-    if (!items.length && existingPreviewItems.length) {
+
+    if (!items.length) {
       existingPreviewItems.forEach(function (item) {
         if (!item || !item.url) return;
-        items.push({
+        pushItem({
           source: 'existing',
-          id: item.asset_id ? String(item.asset_id) : '',
+          id: item.asset_id ? String(item.asset_id) : (item.path || ''),
           url: item.url,
         });
+      });
+    } else {
+      // Fill selected library IDs that have no pick button in the DOM
+      (selectedLibrary || []).forEach(function (id) {
+        if (!id || items.some(function (x) { return String(x.id) === String(id); })) return;
+        var match = existingPreviewItems.find(function (item) {
+          return item && String(item.asset_id) === String(id);
+        });
+        if (match && match.url) {
+          pushItem({ source: 'existing', id: String(id), url: match.url });
+        }
       });
     }
     return items;
@@ -647,27 +676,73 @@
     var startX = 0;
     var deltaX = 0;
     var swiping = false;
+    var pointerId = null;
+
+    function slideCount() {
+      return previewPhotos ? previewPhotos.querySelectorAll('.preview-photo').length : 0;
+    }
+
+    function onStart(clientX, id) {
+      startX = clientX;
+      deltaX = 0;
+      swiping = true;
+      pointerId = id;
+      if (previewSlider) previewSlider.classList.add('is-dragging');
+      if (previewPhotos) previewPhotos.style.transition = 'none';
+    }
+
+    function onMove(clientX) {
+      if (!swiping) return;
+      deltaX = clientX - startX;
+      var count = slideCount();
+      if (count < 2 || !previewPhotos) return;
+      var width = previewSlider.clientWidth || 1;
+      var offset = (-previewSlideIndex * 100) + (deltaX / width * 100);
+      previewPhotos.style.transform = 'translateX(' + offset + '%)';
+    }
+
+    function onEnd() {
+      if (!swiping) return;
+      swiping = false;
+      pointerId = null;
+      if (previewSlider) previewSlider.classList.remove('is-dragging');
+      if (previewPhotos) previewPhotos.style.transition = '';
+      var count = slideCount();
+      if (count < 2) return;
+      if (deltaX <= -40) goToPreviewSlide(previewSlideIndex + 1, count);
+      else if (deltaX >= 40) goToPreviewSlide(previewSlideIndex - 1, count);
+      else goToPreviewSlide(previewSlideIndex, count);
+      deltaX = 0;
+    }
 
     previewSlider.addEventListener('touchstart', function (event) {
       if (!event.touches || !event.touches.length) return;
-      startX = event.touches[0].clientX;
-      deltaX = 0;
-      swiping = true;
+      onStart(event.touches[0].clientX, 'touch');
     }, { passive: true });
 
     previewSlider.addEventListener('touchmove', function (event) {
       if (!swiping || !event.touches || !event.touches.length) return;
-      deltaX = event.touches[0].clientX - startX;
+      onMove(event.touches[0].clientX);
     }, { passive: true });
 
-    previewSlider.addEventListener('touchend', function () {
-      if (!swiping) return;
-      swiping = false;
-      var count = previewPhotos ? previewPhotos.querySelectorAll('.preview-photo').length : 0;
-      if (count < 2) return;
-      if (deltaX <= -40) goToPreviewSlide(previewSlideIndex + 1, count);
-      else if (deltaX >= 40) goToPreviewSlide(previewSlideIndex - 1, count);
-      deltaX = 0;
+    previewSlider.addEventListener('touchend', onEnd);
+    previewSlider.addEventListener('touchcancel', onEnd);
+
+    previewSlider.addEventListener('mousedown', function (event) {
+      if (event.button !== 0) return;
+      if (event.target.closest('.preview-photo-remove, .preview-slider-dot')) return;
+      event.preventDefault();
+      onStart(event.clientX, 'mouse');
+    });
+
+    window.addEventListener('mousemove', function (event) {
+      if (!swiping || pointerId !== 'mouse') return;
+      onMove(event.clientX);
+    });
+
+    window.addEventListener('mouseup', function () {
+      if (pointerId !== 'mouse') return;
+      onEnd();
     });
   })();
 
@@ -732,8 +807,26 @@
     if (item.source === 'existing') {
       existingPreviewItems = existingPreviewItems.filter(function (x) {
         if (item.id && x.asset_id) return String(x.asset_id) !== String(item.id);
+        if (item.id && x.path) return String(x.path) !== String(item.id);
         return x.url !== item.url;
       });
+      if (item.id) {
+        var libBtnExisting = document.querySelector('.library-pick[data-id="' + item.id + '"]');
+        if (libBtnExisting && libBtnExisting.classList.contains('is-selected')) {
+          libBtnExisting.classList.remove('is-selected');
+        }
+        var libIdx = selectedLibrary.indexOf(String(item.id));
+        if (libIdx >= 0) selectedLibrary.splice(libIdx, 1);
+        if (libraryIds) libraryIds.value = selectedLibrary.join(',');
+        syncLibraryStatus();
+        selectedAi = selectedAi.filter(function (x) { return x.path !== item.id && x.url !== item.url; });
+        syncGeneratedPaths();
+        var aiBtnExisting = optionsEl && optionsEl.querySelector('.ai-image-option[data-path="' + item.id + '"]');
+        if (aiBtnExisting) {
+          aiBtnExisting.classList.remove('is-selected');
+          aiBtnExisting.setAttribute('aria-pressed', 'false');
+        }
+      }
       var replaceField = document.getElementById('id_replace_existing_media');
       if (replaceField) replaceField.value = '1';
       renderPreviewPhotos();
@@ -1106,22 +1199,81 @@
 
   setGenerating(false);
   restoreConnectDraft();
-  renderPreviewPhotos();
-  updateText();
-  updateScheduleUI();
 
-  document.querySelectorAll('.platform-card').forEach(function (card) {
-    var input = card.querySelector('input[type="checkbox"]');
-    if (!input) return;
-    function sync() {
-      card.classList.toggle('is-selected', input.checked && !input.disabled);
+  (function restoreSelectionsAfterFailedSubmit() {
+    var libIdSet = {};
+    if (libraryIds && libraryIds.value) {
+      String(libraryIds.value).split(',').forEach(function (id) {
+        id = String(id || '').trim();
+        if (id) libIdSet[id] = true;
+      });
     }
-    input.addEventListener('change', sync);
-    sync();
-  });
+    existingPreviewItems.forEach(function (item) {
+      if (item && item.asset_id) libIdSet[String(item.asset_id)] = true;
+    });
 
-  var libraryStatus = document.getElementById('library-pick-status');
-  var selectedLibrary = [];
+    selectedLibrary = [];
+    document.querySelectorAll('.library-pick').forEach(function (btn) {
+      var id = String(btn.getAttribute('data-id') || '');
+      if (id && libIdSet[id]) {
+        btn.classList.add('is-selected');
+        if (selectedLibrary.indexOf(id) < 0) selectedLibrary.push(id);
+      }
+    });
+    // Preserve IDs that were restored server-side even if a pick button is missing
+    Object.keys(libIdSet).forEach(function (id) {
+      if (selectedLibrary.indexOf(id) < 0) selectedLibrary.push(id);
+    });
+    if (libraryIds) libraryIds.value = selectedLibrary.join(',');
+    syncLibraryStatus();
+
+    var aiImages = [];
+    var selectedPaths = {};
+    if (generatedPaths && generatedPaths.value) {
+      String(generatedPaths.value).split(',').forEach(function (p) {
+        p = String(p || '').trim();
+        if (p) selectedPaths[p] = true;
+      });
+    }
+    if (generatedPath && generatedPath.value) {
+      selectedPaths[String(generatedPath.value).trim()] = true;
+    }
+    existingPreviewItems.forEach(function (item) {
+      if (item && item.path) {
+        selectedPaths[item.path] = true;
+        aiImages.push({ path: item.path, url: item.url });
+      }
+    });
+    Object.keys(selectedPaths).forEach(function (path) {
+      if (!path || aiImages.some(function (x) { return x.path === path; })) return;
+      var match = existingPreviewItems.find(function (item) {
+        return item && item.path === path;
+      });
+      var url = match && match.url
+        ? match.url
+        : ('{{ MEDIA_URL|default:"/media/" }}' + String(path).replace(/^\/+/, ''));
+      aiImages.push({ path: path, url: url });
+    });
+
+    if (aiImages.length) {
+      renderOptions(aiImages);
+      selectedAi = [];
+      aiImages.forEach(function (img) {
+        var btn = optionsEl && optionsEl.querySelector('.ai-image-option[data-path="' + img.path + '"]');
+        if (btn) {
+          btn.classList.add('is-selected');
+          btn.setAttribute('aria-pressed', 'true');
+        }
+        selectedAi.push({ path: img.path, url: img.url });
+      });
+      syncGeneratedPaths();
+      if (aiStatus) {
+        if (selectedAi.length === 1) aiStatus.textContent = '1 photo selected.';
+        else aiStatus.textContent = selectedAi.length + ' photos selected — check the preview on the right.';
+      }
+    }
+  })();
+
   document.querySelectorAll('.library-pick').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var id = String(btn.getAttribute('data-id') || '');
@@ -1134,14 +1286,24 @@
         selectedLibrary.push(id);
         btn.classList.add('is-selected');
       }
-      if (libraryStatus) {
-        if (!selectedLibrary.length) libraryStatus.textContent = '';
-        else if (selectedLibrary.length === 1) libraryStatus.textContent = 'Selected 1 saved photo.';
-        else libraryStatus.textContent = 'Selected ' + selectedLibrary.length + ' photos for this post.';
-      }
+      syncLibraryStatus();
       if (libraryIds) libraryIds.value = selectedLibrary.join(',');
       rebuildPreviewFromSelections();
     });
+  });
+
+  renderPreviewPhotos();
+  updateText();
+  updateScheduleUI();
+
+  document.querySelectorAll('.platform-card').forEach(function (card) {
+    var input = card.querySelector('input[type="checkbox"]');
+    if (!input) return;
+    function sync() {
+      card.classList.toggle('is-selected', input.checked && !input.disabled);
+    }
+    input.addEventListener('change', sync);
+    sync();
   });
 })();
 </script>

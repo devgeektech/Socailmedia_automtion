@@ -238,10 +238,136 @@ def _attach_ai_image(post, form, *, force_regenerate=False):
         post.image.save(content.name, content, save=False)
 
 
-def _post_form_context(request, form, *, is_edit, post=None, page_title='Create Post'):
+def _preview_items_from_bound_form(request, form, *, post=None):
+    """
+    Keep selected photos visible after a failed submit.
+    Gallery uploads are saved into the library so the browser file input loss
+    does not wipe the user's choices.
+    """
+    from .media_utils import kind_from_name, parse_asset_ids, save_upload_to_library
+    from .models import MediaAsset
+
+    items = []
+    seen_urls = set()
+
+    def add_item(url, *, asset_id=0, path=''):
+        if not url or url in seen_urls:
+            return
+        seen_urls.add(url)
+        entry = {'url': url, 'asset_id': int(asset_id or 0)}
+        if path:
+            entry['path'] = path
+        items.append(entry)
+
+    # Start from already-saved post media when editing
+    if post is not None:
+        for media in post.ordered_media():
+            url = media.resolve_image_url()
+            if url:
+                add_item(url, asset_id=media.asset_id or 0)
+        if not items and post.image:
+            add_item(post.image.url)
+
+    data = request.POST.copy()
+    library_raw = (data.get('library_asset_ids') or '').strip()
+    library_ids = [p.strip() for p in library_raw.split(',') if p.strip()]
+
+    # Persist gallery uploads so they survive the round-trip
+    uploaded_ids = []
+    for f in request.FILES.getlist('carousel_files')[:10]:
+        if kind_from_name(f.name) != MediaAsset.KIND_IMAGE:
+            continue
+        try:
+            asset = save_upload_to_library(request.user, f)
+            uploaded_ids.append(str(asset.pk))
+            add_item(asset.file.url, asset_id=asset.pk)
+        except Exception:
+            logger.exception('Could not preserve gallery upload after validation error')
+
+    if uploaded_ids:
+        for uid in uploaded_ids:
+            if uid not in library_ids:
+                library_ids.append(uid)
+        data['library_asset_ids'] = ','.join(library_ids)
+        form.data = data
+
+    for asset in parse_asset_ids(','.join(library_ids), request.user):
+        if asset.kind != MediaAsset.KIND_IMAGE or not asset.file:
+            continue
+        add_item(asset.file.url, asset_id=asset.pk)
+
+    raw_paths = (data.get('generated_image_paths') or data.get('generated_image_path') or '').strip()
+    for rel in [p.strip() for p in raw_paths.split(',') if p.strip()]:
+        full = _safe_temp_path(rel, request.user.id)
+        if not full:
+            # Still show URL if file may exist under MEDIA_URL
+            add_item(f'{settings.MEDIA_URL.rstrip("/")}/{rel.lstrip("/")}', path=rel)
+            continue
+        add_item(f'{settings.MEDIA_URL.rstrip("/")}/{rel.lstrip("/")}', path=rel)
+
+    # If user removed existing slides in the UI, honor that for edit preview
+    if post is not None and (request.POST.get('replace_existing_media') or '').strip() == '1':
+        # Keep only newly chosen library/AI/upload items (already in `items`
+        # after the post seed above — rebuild without post seed)
+        items = []
+        seen_urls = set()
+        for asset in parse_asset_ids(','.join(library_ids), request.user):
+            if asset.kind != MediaAsset.KIND_IMAGE or not asset.file:
+                continue
+            add_item(asset.file.url, asset_id=asset.pk)
+        for rel in [p.strip() for p in raw_paths.split(',') if p.strip()]:
+            add_item(f'{settings.MEDIA_URL.rstrip("/")}/{rel.lstrip("/")}', path=rel)
+
+    return items
+
+
+def _post_form_context(request, form, *, is_edit, post=None, page_title='Create Post', preview_items=None):
     profile = getattr(request.user, 'profile', None)
+    from .media_utils import parse_asset_ids
     from .meta import facebook_publish_ready, instagram_publish_ready
     from .models import MediaAsset
+
+    if preview_items is None:
+        preview_items = []
+        if post is not None:
+            for item in post.ordered_media():
+                url = item.resolve_image_url()
+                if url:
+                    preview_items.append({
+                        'url': url,
+                        'asset_id': item.asset_id or 0,
+                    })
+            if not preview_items and post.image:
+                preview_items.append({'url': post.image.url, 'asset_id': 0})
+
+    # Keep selected / restored assets visible in the picker after failed submits
+    selected_ids = []
+    raw_ids = ''
+    if getattr(form, 'data', None):
+        raw_ids = (form.data.get('library_asset_ids') or '').strip()
+    selected_ids.extend(
+        a.pk for a in parse_asset_ids(raw_ids, request.user) if a.kind == MediaAsset.KIND_IMAGE
+    )
+    for item in preview_items:
+        aid = int(item.get('asset_id') or 0)
+        if aid and aid not in selected_ids:
+            selected_ids.append(aid)
+
+    recent = list(
+        MediaAsset.objects.filter(
+            user=request.user,
+            kind=MediaAsset.KIND_IMAGE,
+        )[:24]
+    )
+    by_id = {a.pk: a for a in recent}
+    for asset in MediaAsset.objects.filter(
+        user=request.user,
+        kind=MediaAsset.KIND_IMAGE,
+        pk__in=selected_ids,
+    ):
+        by_id[asset.pk] = asset
+    library_assets = list(by_id.values())
+    library_assets.sort(key=lambda a: a.created_at, reverse=True)
 
     ctx = {
         'form': form,
@@ -251,30 +377,17 @@ def _post_form_context(request, form, *, is_edit, post=None, page_title='Create 
         'meta_connected': bool(profile and profile.meta_connected),
         'facebook_ready': facebook_publish_ready(request.user),
         'instagram_ready': instagram_publish_ready(request.user),
-        'library_assets': MediaAsset.objects.filter(
-            user=request.user,
-            kind=MediaAsset.KIND_IMAGE,
-        )[:24],
+        'library_assets': library_assets,
     }
+
     if post is not None:
         ctx['post'] = post
         ctx['is_draft'] = post.status == Post.STATUS_DRAFT
-        preview_items = []
-        for item in post.ordered_media():
-            url = item.resolve_image_url()
-            if url:
-                preview_items.append({
-                    'url': url,
-                    'asset_id': item.asset_id or 0,
-                })
-        if not preview_items and post.image:
-            preview_items.append({'url': post.image.url, 'asset_id': 0})
-        ctx['existing_preview_urls'] = [x['url'] for x in preview_items]
-        ctx['existing_preview_items'] = preview_items
     else:
         ctx['is_draft'] = False
-        ctx['existing_preview_urls'] = []
-        ctx['existing_preview_items'] = []
+
+    ctx['existing_preview_urls'] = [x['url'] for x in preview_items if x.get('url')]
+    ctx['existing_preview_items'] = preview_items
     return ctx
 
 
@@ -369,9 +482,14 @@ def post_create_view(request):
             redirect_response = _handle_post_submit(request, form)
             if redirect_response:
                 return redirect_response
-    else:
-        form = PostForm(user=request.user)
+        preview_items = _preview_items_from_bound_form(request, form)
+        return render(
+            request,
+            'posts/post_form.html',
+            _post_form_context(request, form, is_edit=False, preview_items=preview_items),
+        )
 
+    form = PostForm(user=request.user)
     return render(
         request,
         'posts/post_form.html',
@@ -406,9 +524,21 @@ def post_edit_view(request, pk):
             redirect_response = _handle_post_submit(request, form, post=post)
             if redirect_response:
                 return redirect_response
-    else:
-        form = PostForm(instance=post, user=request.user)
+        preview_items = _preview_items_from_bound_form(request, form, post=post)
+        return render(
+            request,
+            'posts/post_form.html',
+            _post_form_context(
+                request,
+                form,
+                is_edit=True,
+                post=post,
+                page_title=page_title,
+                preview_items=preview_items,
+            ),
+        )
 
+    form = PostForm(instance=post, user=request.user)
     return render(
         request,
         'posts/post_form.html',
@@ -425,57 +555,57 @@ def post_duplicate_view(request, pk):
     return redirect('posts:edit', pk=clone.pk)
 
 
-# @subscription_required
-# def media_library_view(request):
-#     from .models import MediaAsset
+@subscription_required
+def media_library_view(request):
+    from .models import MediaAsset
 
-#     assets = MediaAsset.objects.filter(user=request.user, kind=MediaAsset.KIND_IMAGE)
+    assets = MediaAsset.objects.filter(user=request.user, kind=MediaAsset.KIND_IMAGE)
 
-#     return render(request, 'posts/media_library.html', {
-#         'subscription': request.subscription,
-#         'assets': assets[:120],
-#     })
-
-
-# @subscription_required
-# @require_POST
-# def media_upload_view(request):
-#     from .media_utils import kind_from_name, save_upload_to_library
-#     from .models import MediaAsset
-
-#     files = request.FILES.getlist('files') or ([request.FILES['file']] if request.FILES.get('file') else [])
-#     if not files:
-#         messages.error(request, 'Choose at least one image to upload.')
-#         return redirect('posts:media_library')
-
-#     saved = 0
-#     skipped = 0
-#     for f in files[:20]:
-#         if kind_from_name(f.name) != MediaAsset.KIND_IMAGE:
-#             skipped += 1
-#             continue
-#         save_upload_to_library(request.user, f)
-#         saved += 1
-#     if saved:
-#         messages.success(request, f'Added {saved} image{"s" if saved != 1 else ""} to your media library.')
-#     if skipped:
-#         messages.warning(request, 'Video uploads are disabled for now — only images were saved.')
-#     if not saved and not skipped:
-#         messages.error(request, 'No images were uploaded.')
-#     return redirect('posts:media_library')
+    return render(request, 'posts/media_library.html', {
+        'subscription': request.subscription,
+        'assets': assets[:120],
+    })
 
 
-# @subscription_required
-# @require_POST
-# def media_delete_view(request, pk):
-#     from .models import MediaAsset
+@subscription_required
+@require_POST
+def media_upload_view(request):
+    from .media_utils import kind_from_name, save_upload_to_library
+    from .models import MediaAsset
 
-#     asset = get_object_or_404(MediaAsset, pk=pk, user=request.user)
-#     if asset.file:
-#         asset.file.delete(save=False)
-#     asset.delete()
-#     messages.success(request, 'Removed from media library.')
-#     return redirect('posts:media_library')
+    files = request.FILES.getlist('files') or ([request.FILES['file']] if request.FILES.get('file') else [])
+    if not files:
+        messages.error(request, 'Choose at least one image to upload.')
+        return redirect('posts:media_library')
+
+    saved = 0
+    skipped = 0
+    for f in files[:20]:
+        if kind_from_name(f.name) != MediaAsset.KIND_IMAGE:
+            skipped += 1
+            continue
+        save_upload_to_library(request.user, f)
+        saved += 1
+    if saved:
+        messages.success(request, f'Added {saved} image{"s" if saved != 1 else ""} to your media library.')
+    if skipped:
+        messages.warning(request, 'Video uploads are disabled for now — only images were saved.')
+    if not saved and not skipped:
+        messages.error(request, 'No images were uploaded.')
+    return redirect('posts:media_library')
+
+
+@subscription_required
+@require_POST
+def media_delete_view(request, pk):
+    from .models import MediaAsset
+
+    asset = get_object_or_404(MediaAsset, pk=pk, user=request.user)
+    if asset.file:
+        asset.file.delete(save=False)
+    asset.delete()
+    messages.success(request, 'Removed from media library.')
+    return redirect('posts:media_library')
 
 
 @subscription_required

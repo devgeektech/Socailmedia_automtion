@@ -2774,6 +2774,13 @@ body.home-page .grid-overlay {
   width: 100%;
   overflow: hidden;
   border-radius: 12px;
+  cursor: grab;
+  user-select: none;
+  touch-action: pan-y;
+}
+
+.preview-slider.is-dragging {
+  cursor: grabbing;
 }
 
 .preview-slider[hidden] {
