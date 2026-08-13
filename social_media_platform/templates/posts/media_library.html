@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Media Library — SocialFlow{% endblock %}
+{% block title %}Saved photos — SocialFlow{% endblock %}
 {% block wrapper_class %}dashboard-wrapper{% endblock %}
 {% block content %}
 <div class="dashboard-layout">
@@ -9,7 +9,7 @@
         <div class="logo-icon">◈</div>
         <span class="logo-text">SocialFlow</span>
       </a>
-      <h1 class="dashboard-title">Media Library</h1>
+      <h1 class="dashboard-title">Saved photos</h1>
     </div>
     <div class="dashboard-actions">
       <a href="{% url 'posts:create' %}" class="btn-primary">Create post</a>
@@ -18,41 +18,122 @@
   </div>
 
   <div class="glass-card">
-    <h2 class="posts-section-title" style="margin-bottom:0.75rem;">Upload</h2>
+    <h2 class="posts-section-title" style="margin-bottom:0.5rem;">Upload</h2>
     <p class="platform-note" style="margin-bottom:1rem;">Save photos here so you can reuse them in future posts.</p>
     <form method="post" action="{% url 'posts:media_upload' %}" enctype="multipart/form-data" class="media-upload-form">
       {% csrf_token %}
       <input type="file" name="files" class="glass-input" accept="image/*" multiple required>
-      <button type="submit" class="btn-primary">Add to library</button>
+      <button type="submit" class="btn-primary" style="width:auto;">Add photos</button>
     </form>
   </div>
 
   <div class="posts-section-header" style="margin-top:1.5rem;">
-    <h2 class="posts-section-title">Your images</h2>
+    <h2 class="posts-section-title">Your photos</h2>
   </div>
 
   {% if assets %}
   <div class="media-grid">
     {% for asset in assets %}
     <article class="glass-card media-card">
-      <div class="media-card-preview">
-        <img src="{{ asset.file.url }}" alt="{{ asset.original_name }}">
-      </div>
+      <button
+        type="button"
+        class="media-card-preview js-media-open"
+        data-url="{{ asset.file.url }}"
+        data-title="{% if asset.source == 'ai' %}Made with AI{% elif asset.source == 'upload' %}Uploaded{% else %}{{ asset.get_source_display }}{% endif %}"
+        data-date="{{ asset.created_at|date:'M j, Y' }}"
+        aria-label="View full photo"
+      >
+        <img src="{{ asset.file.url }}" alt="{{ asset.original_name|default:'Saved photo' }}" loading="lazy">
+        <span class="media-card-view-hint">View</span>
+      </button>
       <div class="media-card-meta">
-        <span class="chip">{{ asset.get_source_display }}</span>
-        <small>{{ asset.created_at|date:"M d, Y" }}</small>
+        <span class="media-card-source">
+          {% if asset.source == 'ai' %}Made with AI
+          {% elif asset.source == 'upload' %}Uploaded
+          {% else %}{{ asset.get_source_display }}{% endif %}
+        </span>
+        <time class="media-card-date" datetime="{{ asset.created_at|date:'Y-m-d' }}">{{ asset.created_at|date:"M j, Y" }}</time>
       </div>
-      <form method="post" action="{% url 'posts:media_delete' asset.pk %}" onsubmit="return confirm('Remove this file from your library?');">
+      <form method="post" action="{% url 'posts:media_delete' asset.pk %}" onsubmit="return confirm('Remove this photo from your library?');">
         {% csrf_token %}
-        <button type="submit" class="btn-secondary btn-sm">Delete</button>
+        <button type="submit" class="btn-secondary btn-sm media-card-delete">Delete</button>
       </form>
     </article>
     {% endfor %}
   </div>
   {% else %}
   <div class="glass-card empty-state">
-    <p>No images yet. Upload files or generate AI images while creating a post.</p>
+    <p>No photos yet. Upload some here, or create them with AI while making a post.</p>
   </div>
   {% endif %}
 </div>
+
+<div class="media-lightbox" id="media-lightbox" hidden>
+  <div class="media-lightbox-backdrop js-media-close" tabindex="-1"></div>
+  <div class="media-lightbox-dialog" role="dialog" aria-modal="true" aria-labelledby="media-lightbox-title">
+    <div class="media-lightbox-header">
+      <div>
+        <h2 class="media-lightbox-title" id="media-lightbox-title">Photo</h2>
+        <p class="media-lightbox-date" id="media-lightbox-date"></p>
+      </div>
+      <button type="button" class="btn-secondary btn-sm js-media-close" aria-label="Close">Close</button>
+    </div>
+    <div class="media-lightbox-body">
+      <img src="" alt="Full size photo" id="media-lightbox-image">
+    </div>
+    <div class="media-lightbox-actions">
+      <button type="button" class="btn-secondary js-media-close">Cancel</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var lightbox = document.getElementById('media-lightbox');
+  var image = document.getElementById('media-lightbox-image');
+  var title = document.getElementById('media-lightbox-title');
+  var dateEl = document.getElementById('media-lightbox-date');
+  if (!lightbox || !image) return;
+
+  function openLightbox(url, label, dateText) {
+    image.src = url || '';
+    image.alt = label || 'Full size photo';
+    if (title) title.textContent = label || 'Photo';
+    if (dateEl) {
+      dateEl.textContent = dateText || '';
+      dateEl.hidden = !dateText;
+    }
+    lightbox.hidden = false;
+    document.body.classList.add('media-lightbox-open');
+    var closeBtn = lightbox.querySelector('.js-media-close');
+    if (closeBtn) closeBtn.focus();
+  }
+
+  function closeLightbox() {
+    lightbox.hidden = true;
+    document.body.classList.remove('media-lightbox-open');
+    image.removeAttribute('src');
+  }
+
+  document.querySelectorAll('.js-media-open').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      openLightbox(
+        btn.getAttribute('data-url'),
+        btn.getAttribute('data-title'),
+        btn.getAttribute('data-date')
+      );
+    });
+  });
+
+  lightbox.querySelectorAll('.js-media-close').forEach(function (el) {
+    el.addEventListener('click', closeLightbox);
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && !lightbox.hidden) closeLightbox();
+  });
+})();
+</script>
 {% endblock %}
