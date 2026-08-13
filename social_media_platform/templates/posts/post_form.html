@@ -221,7 +221,10 @@
         </div>
         <div class="social-preview-media{% if is_edit and existing_preview_urls %} has-image{% endif %}" id="preview-media">
           <div class="preview-media-placeholder" id="preview-placeholder" {% if is_edit and existing_preview_urls %}hidden{% endif %}>Your photos will appear here</div>
-          <div class="preview-photos" id="preview-photos" {% if not is_edit or not existing_preview_urls %}hidden{% endif %}></div>
+          <div class="preview-slider" id="preview-slider" {% if not is_edit or not existing_preview_urls %}hidden{% endif %}>
+            <div class="preview-photos" id="preview-photos"></div>
+            <div class="preview-slider-dots" id="preview-slider-dots" hidden></div>
+          </div>
         </div>
         <div class="social-preview-text">
           <p class="social-preview-caption" id="preview-caption">{% if is_edit %}{{ post.caption }}{% endif %}</p>
@@ -267,9 +270,12 @@
   var previewDesc = document.getElementById('preview-description');
   var previewCaption = document.getElementById('preview-caption');
   var previewPhotos = document.getElementById('preview-photos');
+  var previewSlider = document.getElementById('preview-slider');
+  var previewSliderDots = document.getElementById('preview-slider-dots');
   var previewPlaceholder = document.getElementById('preview-placeholder');
   var previewSchedule = document.getElementById('preview-schedule');
   var previewStatus = document.getElementById('preview-status-label');
+  var previewSlideIndex = 0;
 
   function csrfToken() {
     var el = document.querySelector('#post-form input[name="csrfmiddlewaretoken"]');
@@ -558,6 +564,20 @@
     return items;
   }
 
+  function goToPreviewSlide(index, itemCount) {
+    var count = itemCount || (previewPhotos ? previewPhotos.querySelectorAll('.preview-photo').length : 0);
+    if (!count) return;
+    previewSlideIndex = ((index % count) + count) % count;
+    if (previewPhotos) {
+      previewPhotos.style.transform = 'translateX(' + (-previewSlideIndex * 100) + '%)';
+    }
+    if (previewSliderDots) {
+      previewSliderDots.querySelectorAll('.preview-slider-dot').forEach(function (dot, i) {
+        dot.classList.toggle('is-active', i === previewSlideIndex);
+      });
+    }
+  }
+
   function renderPreviewPhotos() {
     var items = collectPreviewItems();
     var media = document.getElementById('preview-media');
@@ -566,18 +586,22 @@
 
     setHidden(previewPlaceholder, has);
     if (previewPlaceholder) previewPlaceholder.style.display = has ? 'none' : '';
-    setHidden(previewPhotos, !has);
+    setHidden(previewSlider, !has);
     if (media) media.classList.toggle('has-image', has);
     if (!previewPhotos) return;
 
+    if (previewSlideIndex >= items.length) previewSlideIndex = Math.max(0, items.length - 1);
+
     previewPhotos.innerHTML = '';
-    previewPhotos.className = 'preview-photos' + (multi ? ' is-multi count-' + Math.min(items.length, 4) : '');
+    previewPhotos.className = 'preview-photos' + (multi ? ' is-slider' : '');
+    previewPhotos.style.transform = 'translateX(0)';
     items.forEach(function (item, index) {
       var cell = document.createElement('div');
       cell.className = 'preview-photo';
       var img = document.createElement('img');
       img.src = item.url;
-      img.alt = items.length > 1 ? ('Photo ' + (index + 1) + ' of ' + items.length) : 'Post photo';
+      img.alt = multi ? ('Photo ' + (index + 1) + ' of ' + items.length) : 'Post photo';
+      img.draggable = false;
       cell.appendChild(img);
       if (multi) {
         var removeBtn = document.createElement('button');
@@ -594,8 +618,58 @@
       }
       previewPhotos.appendChild(cell);
     });
+
+    if (previewSliderDots) {
+      previewSliderDots.innerHTML = '';
+      if (multi) {
+        setHidden(previewSliderDots, false);
+        items.forEach(function (_, i) {
+          var dot = document.createElement('button');
+          dot.type = 'button';
+          dot.className = 'preview-slider-dot' + (i === previewSlideIndex ? ' is-active' : '');
+          dot.setAttribute('aria-label', 'Photo ' + (i + 1));
+          dot.addEventListener('click', function () {
+            goToPreviewSlide(i, items.length);
+          });
+          previewSliderDots.appendChild(dot);
+        });
+      } else {
+        setHidden(previewSliderDots, true);
+      }
+    }
+
+    goToPreviewSlide(previewSlideIndex, items.length);
     syncLibraryIdsFromPreview(items);
   }
+
+  (function bindPreviewSwipe() {
+    if (!previewSlider) return;
+    var startX = 0;
+    var deltaX = 0;
+    var swiping = false;
+
+    previewSlider.addEventListener('touchstart', function (event) {
+      if (!event.touches || !event.touches.length) return;
+      startX = event.touches[0].clientX;
+      deltaX = 0;
+      swiping = true;
+    }, { passive: true });
+
+    previewSlider.addEventListener('touchmove', function (event) {
+      if (!swiping || !event.touches || !event.touches.length) return;
+      deltaX = event.touches[0].clientX - startX;
+    }, { passive: true });
+
+    previewSlider.addEventListener('touchend', function () {
+      if (!swiping) return;
+      swiping = false;
+      var count = previewPhotos ? previewPhotos.querySelectorAll('.preview-photo').length : 0;
+      if (count < 2) return;
+      if (deltaX <= -40) goToPreviewSlide(previewSlideIndex + 1, count);
+      else if (deltaX >= 40) goToPreviewSlide(previewSlideIndex - 1, count);
+      deltaX = 0;
+    });
+  })();
 
   function removeGalleryFileAt(index) {
     if (!galleryInput || !galleryInput.files) return;
