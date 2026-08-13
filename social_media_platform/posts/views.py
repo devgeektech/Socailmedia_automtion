@@ -374,21 +374,15 @@ def _post_form_context(request, form, *, is_edit, post=None, page_title='Create 
         if aid and aid not in selected_ids:
             selected_ids.append(aid)
 
-    recent = list(
+    # Only selected assets for the form chips — full library loads in the picker modal
+    selected_assets = list(
         MediaAsset.objects.filter(
             user=request.user,
             kind=MediaAsset.KIND_IMAGE,
-        )[:48]
+            pk__in=selected_ids,
+        )
     )
-    by_id = {a.pk: a for a in recent}
-    for asset in MediaAsset.objects.filter(
-        user=request.user,
-        kind=MediaAsset.KIND_IMAGE,
-        pk__in=selected_ids,
-    ):
-        by_id[asset.pk] = asset
-    library_assets = list(by_id.values())
-    library_assets.sort(key=lambda a: a.created_at, reverse=True)
+    selected_assets.sort(key=lambda a: selected_ids.index(a.pk) if a.pk in selected_ids else 0)
 
     ctx = {
         'form': form,
@@ -398,7 +392,11 @@ def _post_form_context(request, form, *, is_edit, post=None, page_title='Create 
         'meta_connected': bool(profile and profile.meta_connected),
         'facebook_ready': facebook_publish_ready(request.user),
         'instagram_ready': instagram_publish_ready(request.user),
-        'library_assets': library_assets,
+        'library_assets': selected_assets,
+        'has_library_photos': MediaAsset.objects.filter(
+            user=request.user,
+            kind=MediaAsset.KIND_IMAGE,
+        ).exists(),
     }
 
     if post is not None:
@@ -574,6 +572,51 @@ def post_duplicate_view(request, pk):
     clone = post.duplicate_for(request.user)
     messages.success(request, 'Post duplicated as a draft. Update the caption or schedule, then publish.')
     return redirect('posts:edit', pk=clone.pk)
+
+
+@subscription_required
+def media_picker_api_view(request):
+    """Paginated JSON list of saved photos for the post form picker."""
+    from .models import MediaAsset
+
+    try:
+        page = max(1, int(request.GET.get('page') or 1))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = min(48, max(12, int(request.GET.get('page_size') or 24)))
+    except (TypeError, ValueError):
+        page_size = 24
+
+    q = (request.GET.get('q') or '').strip()
+    qs = MediaAsset.objects.filter(user=request.user, kind=MediaAsset.KIND_IMAGE)
+    if q:
+        qs = qs.filter(original_name__icontains=q)
+
+    total = qs.count()
+    start = (page - 1) * page_size
+    end = start + page_size
+    items = []
+    for asset in qs[start:end]:
+        if not asset.file:
+            continue
+        items.append({
+            'id': asset.pk,
+            'url': asset.file.url,
+            'name': asset.original_name or 'Saved photo',
+            'source': asset.source,
+            'created': asset.created_at.strftime('%b %d, %Y') if asset.created_at else '',
+        })
+
+    has_more = end < total
+    return JsonResponse({
+        'ok': True,
+        'items': items,
+        'page': page,
+        'page_size': page_size,
+        'total': total,
+        'has_more': has_more,
+    })
 
 
 @subscription_required

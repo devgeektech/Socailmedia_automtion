@@ -64,26 +64,29 @@
 
       <div class="form-group photo-source-group">
         <label class="form-label">Photos</label>
-        <p class="platform-note" style="margin-bottom:0.75rem;">Upload new photos, or choose ones you’ve already saved. Tap more than one to post them together.</p>
+        <p class="platform-note" style="margin-bottom:0.75rem;">Upload new photos, or pick from your saved library. You can add more than one.</p>
         <div class="photo-source-actions">
           <button type="button" class="btn-secondary photo-source-btn" id="btn-upload-photos">Upload from device</button>
-          <button type="button" class="btn-secondary photo-source-btn" id="btn-choose-saved" aria-expanded="false" aria-controls="saved-photos-panel">Choose saved photos</button>
+          <button type="button" class="btn-secondary photo-source-btn" id="btn-choose-saved"{% if not has_library_photos and not library_assets %} disabled title="No saved photos yet"{% endif %}>Choose saved photos</button>
         </div>
         <input type="file" name="carousel_files" id="id_carousel_files" class="photo-file-input" accept="image/*" multiple>
         <div class="gallery-upload-thumbs" id="gallery-upload-thumbs" hidden></div>
-        <div class="saved-photos-panel" id="saved-photos-panel" hidden>
-          {% if library_assets %}
-          <p class="platform-note" id="library-pick-status" aria-live="polite" data-empty="Tap a photo to add it. Tap again to remove it.">Tap a photo to add it. Tap again to remove it.</p>
-          <div class="library-picker" id="library-picker">
+        <div class="selected-library-row" id="selected-library-row"{% if not library_assets %} hidden{% endif %}>
+          <p class="platform-note" id="library-pick-status" aria-live="polite" data-empty="No saved photos selected.">
+            {% if library_assets %}
+              {% if library_assets|length == 1 %}1 saved photo selected.{% else %}{{ library_assets|length }} saved photos selected.{% endif %}
+            {% else %}
+              No saved photos selected.
+            {% endif %}
+          </p>
+          <div class="selected-library-thumbs" id="selected-library-thumbs">
             {% for asset in library_assets %}
-            <button type="button" class="library-pick" data-id="{{ asset.pk }}" data-url="{{ asset.file.url }}" data-kind="image" title="{{ asset.original_name|default:'Saved photo' }}">
+            <button type="button" class="selected-library-thumb" data-id="{{ asset.pk }}" data-url="{{ asset.file.url }}" title="Remove photo">
               <img src="{{ asset.file.url }}" alt="{{ asset.original_name|default:'Saved photo' }}" loading="lazy">
+              <span class="selected-library-remove" aria-hidden="true">×</span>
             </button>
             {% endfor %}
           </div>
-          {% else %}
-          <p class="platform-note" id="library-pick-status" data-empty="No saved photos yet. Upload from your device, or generate with AI above.">No saved photos yet. Upload from your device, or generate with AI above.</p>
-          {% endif %}
         </div>
         <div hidden>{{ form.regenerate_image }}</div>
       </div>
@@ -233,6 +236,29 @@
   </div>
 </div>
 {{ existing_preview_items|json_script:"existing-preview-items" }}
+
+<div class="media-picker-modal" id="media-picker-modal" hidden>
+  <div class="media-picker-backdrop js-media-picker-close" tabindex="-1"></div>
+  <div class="media-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="media-picker-title">
+    <div class="media-picker-header">
+      <div>
+        <h2 class="media-picker-title" id="media-picker-title">Choose saved photos</h2>
+        <p class="platform-note" id="media-picker-count">Select one or more photos.</p>
+      </div>
+      <button type="button" class="btn-secondary btn-sm js-media-picker-close" aria-label="Close">Close</button>
+    </div>
+    <div class="media-picker-toolbar">
+      <label class="media-picker-search-label" for="media-picker-search">Search</label>
+      <input type="search" id="media-picker-search" class="glass-input media-picker-search" placeholder="Search by file name…" autocomplete="off">
+    </div>
+    <div class="media-picker-grid" id="media-picker-grid" aria-live="polite"></div>
+    <p class="platform-note media-picker-empty" id="media-picker-empty" hidden>No photos match that search.</p>
+    <div class="media-picker-footer">
+      <button type="button" class="btn-secondary" id="media-picker-load-more" hidden>Load more</button>
+      <button type="button" class="btn-primary" id="media-picker-done" style="width:auto;">Done</button>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -500,8 +526,11 @@
   var galleryThumbs = document.getElementById('gallery-upload-thumbs');
   var libraryIds = document.getElementById('id_library_asset_ids');
   var libraryStatus = document.getElementById('library-pick-status');
+  var selectedLibraryRow = document.getElementById('selected-library-row');
+  var selectedLibraryThumbs = document.getElementById('selected-library-thumbs');
   var selectedAi = [];
   var selectedLibrary = [];
+  var selectedLibraryMeta = {};
   var existingPreviewItems = [];
   try {
     var existingEl = document.getElementById('existing-preview-items');
@@ -511,15 +540,78 @@
     existingPreviewItems = [];
   }
 
+  // Seed selected saved photos already rendered by the server
+  if (selectedLibraryThumbs) {
+    selectedLibraryThumbs.querySelectorAll('.selected-library-thumb').forEach(function (btn) {
+      var id = String(btn.getAttribute('data-id') || '');
+      var url = btn.getAttribute('data-url') || '';
+      if (!id || !url) return;
+      selectedLibrary.push(id);
+      selectedLibraryMeta[id] = { id: id, url: url, name: (btn.querySelector('img') && btn.querySelector('img').alt) || 'Saved photo' };
+    });
+  }
+
   function syncLibraryStatus() {
     if (!libraryStatus) return;
     if (!selectedLibrary.length) {
-      libraryStatus.textContent = libraryStatus.getAttribute('data-empty') || 'Tap a photo to add it. Tap again to remove it.';
+      libraryStatus.textContent = libraryStatus.getAttribute('data-empty') || 'No saved photos selected.';
     } else if (selectedLibrary.length === 1) {
       libraryStatus.textContent = '1 saved photo selected.';
     } else {
       libraryStatus.textContent = selectedLibrary.length + ' saved photos selected.';
     }
+    if (selectedLibraryRow) selectedLibraryRow.hidden = !selectedLibrary.length;
+  }
+
+  function syncLibraryHidden() {
+    if (libraryIds) libraryIds.value = selectedLibrary.join(',');
+  }
+
+  function renderSelectedLibraryThumbs() {
+    if (!selectedLibraryThumbs) return;
+    selectedLibraryThumbs.innerHTML = '';
+    selectedLibrary.forEach(function (id) {
+      var meta = selectedLibraryMeta[id];
+      if (!meta || !meta.url) return;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'selected-library-thumb';
+      btn.setAttribute('data-id', id);
+      btn.setAttribute('data-url', meta.url);
+      btn.title = 'Remove photo';
+      var img = document.createElement('img');
+      img.src = meta.url;
+      img.alt = meta.name || 'Saved photo';
+      img.loading = 'lazy';
+      var x = document.createElement('span');
+      x.className = 'selected-library-remove';
+      x.setAttribute('aria-hidden', 'true');
+      x.textContent = '×';
+      btn.appendChild(img);
+      btn.appendChild(x);
+      btn.addEventListener('click', function () {
+        toggleLibrarySelection(id, meta.url, meta.name, false);
+      });
+      selectedLibraryThumbs.appendChild(btn);
+    });
+    syncLibraryStatus();
+  }
+
+  function toggleLibrarySelection(id, url, name, forceOn) {
+    id = String(id || '');
+    if (!id) return;
+    var idx = selectedLibrary.indexOf(id);
+    var shouldSelect = typeof forceOn === 'boolean' ? forceOn : idx < 0;
+    if (shouldSelect) {
+      if (idx < 0) selectedLibrary.push(id);
+      selectedLibraryMeta[id] = { id: id, url: url || (selectedLibraryMeta[id] && selectedLibraryMeta[id].url) || '', name: name || 'Saved photo' };
+    } else {
+      if (idx >= 0) selectedLibrary.splice(idx, 1);
+      delete selectedLibraryMeta[id];
+    }
+    syncLibraryHidden();
+    renderSelectedLibraryThumbs();
+    rebuildPreviewFromSelections();
   }
 
   function setHidden(el, isHidden) {
@@ -571,10 +663,9 @@
         }
       });
     }
-    document.querySelectorAll('.library-pick.is-selected').forEach(function (btn) {
-      var id = String(btn.getAttribute('data-id') || '');
-      var u = btn.getAttribute('data-url') || (btn.querySelector('img') && btn.querySelector('img').src);
-      if (u) pushItem({ source: 'library', id: id, url: u });
+    selectedLibrary.forEach(function (id) {
+      var meta = selectedLibraryMeta[id];
+      if (meta && meta.url) pushItem({ source: 'library', id: id, url: meta.url });
     });
     selectedAi.forEach(function (item) {
       if (item.url) pushItem({ source: 'ai', id: item.path || '', url: item.url });
@@ -783,8 +874,7 @@
       return;
     }
     if (item.source === 'library') {
-      var libBtn = document.querySelector('.library-pick[data-id="' + item.id + '"]');
-      if (libBtn) libBtn.click();
+      toggleLibrarySelection(item.id, item.url, '', false);
       return;
     }
     if (item.source === 'gallery') {
@@ -801,14 +891,7 @@
         return x.url !== item.url;
       });
       if (item.id) {
-        var libBtnExisting = document.querySelector('.library-pick[data-id="' + item.id + '"]');
-        if (libBtnExisting && libBtnExisting.classList.contains('is-selected')) {
-          libBtnExisting.classList.remove('is-selected');
-        }
-        var libIdx = selectedLibrary.indexOf(String(item.id));
-        if (libIdx >= 0) selectedLibrary.splice(libIdx, 1);
-        if (libraryIds) libraryIds.value = selectedLibrary.join(',');
-        syncLibraryStatus();
+        toggleLibrarySelection(item.id, item.url, '', false);
         selectedAi = selectedAi.filter(function (x) { return x.path !== item.id && x.url !== item.url; });
         syncGeneratedPaths();
         var aiBtnExisting = optionsEl && optionsEl.querySelector('.ai-image-option[data-path="' + item.id + '"]');
@@ -1106,12 +1189,10 @@
       if (form) form.reset();
       selectedAi = [];
       selectedLibrary = [];
+      selectedLibraryMeta = {};
       syncGeneratedPaths();
-      if (libraryIds) libraryIds.value = '';
-      if (libraryStatus) libraryStatus.textContent = '';
-      document.querySelectorAll('.library-pick.is-selected').forEach(function (btn) {
-        btn.classList.remove('is-selected');
-      });
+      syncLibraryHidden();
+      renderSelectedLibraryThumbs();
       if (galleryThumbs) {
         galleryThumbs.innerHTML = '';
         galleryThumbs.hidden = true;
@@ -1198,21 +1279,20 @@
         if (id) libIdSet[id] = true;
       });
     }
-
-    selectedLibrary = [];
-    document.querySelectorAll('.library-pick').forEach(function (btn) {
-      var id = String(btn.getAttribute('data-id') || '');
-      if (id && libIdSet[id]) {
-        btn.classList.add('is-selected');
-        if (selectedLibrary.indexOf(id) < 0) selectedLibrary.push(id);
-      }
-    });
-    // Preserve IDs that were restored server-side even if a pick button is missing
     Object.keys(libIdSet).forEach(function (id) {
-      if (selectedLibrary.indexOf(id) < 0) selectedLibrary.push(id);
+      if (selectedLibrary.indexOf(id) >= 0) return;
+      var match = existingPreviewItems.find(function (item) {
+        return item && String(item.asset_id) === String(id);
+      });
+      selectedLibrary.push(id);
+      selectedLibraryMeta[id] = {
+        id: id,
+        url: (match && match.url) || '',
+        name: 'Saved photo',
+      };
     });
-    if (libraryIds) libraryIds.value = selectedLibrary.join(',');
-    syncLibraryStatus();
+    syncLibraryHidden();
+    renderSelectedLibraryThumbs();
 
     var aiImages = [];
     var selectedPaths = {};
@@ -1261,36 +1341,138 @@
     }
   })();
 
-  document.querySelectorAll('.library-pick').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var id = String(btn.getAttribute('data-id') || '');
-      if (!id) return;
-      var idx = selectedLibrary.indexOf(id);
-      if (idx >= 0) {
-        selectedLibrary.splice(idx, 1);
-        btn.classList.remove('is-selected');
-      } else {
-        selectedLibrary.push(id);
-        btn.classList.add('is-selected');
-      }
-      syncLibraryStatus();
-      if (libraryIds) libraryIds.value = selectedLibrary.join(',');
-      rebuildPreviewFromSelections();
-    });
-  });
-
   var uploadBtn = document.getElementById('btn-upload-photos');
   var chooseSavedBtn = document.getElementById('btn-choose-saved');
-  var savedPanel = document.getElementById('saved-photos-panel');
+  var pickerModal = document.getElementById('media-picker-modal');
+  var pickerGrid = document.getElementById('media-picker-grid');
+  var pickerEmpty = document.getElementById('media-picker-empty');
+  var pickerCount = document.getElementById('media-picker-count');
+  var pickerSearch = document.getElementById('media-picker-search');
+  var pickerLoadMore = document.getElementById('media-picker-load-more');
+  var pickerDone = document.getElementById('media-picker-done');
+  var pickerPage = 1;
+  var pickerQuery = '';
+  var pickerHasMore = false;
+  var pickerLoading = false;
+  var pickerSearchTimer = null;
+  var PICKER_URL = '{% url "posts:media_picker" %}';
 
-  function setSavedPanelOpen(open) {
-    if (!savedPanel) return;
-    savedPanel.hidden = !open;
-    if (chooseSavedBtn) {
-      chooseSavedBtn.classList.toggle('is-open', open);
-      chooseSavedBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
-      chooseSavedBtn.textContent = open ? 'Hide saved photos' : 'Choose saved photos';
+  function updatePickerCountLabel(total) {
+    if (!pickerCount) return;
+    var sel = selectedLibrary.length;
+    var parts = [];
+    if (typeof total === 'number') {
+      parts.push(total === 1 ? '1 photo in library' : total + ' photos in library');
     }
+    if (sel) parts.push(sel === 1 ? '1 selected' : sel + ' selected');
+    else parts.push('Tap to select');
+    pickerCount.textContent = parts.join(' · ');
+  }
+
+  function syncPickerSelectionUI() {
+    if (!pickerGrid) return;
+    pickerGrid.querySelectorAll('.library-pick').forEach(function (btn) {
+      var id = String(btn.getAttribute('data-id') || '');
+      btn.classList.toggle('is-selected', selectedLibrary.indexOf(id) >= 0);
+    });
+    updatePickerCountLabel();
+  }
+
+  function appendPickerItems(items) {
+    if (!pickerGrid) return;
+    (items || []).forEach(function (item) {
+      var id = String(item.id || '');
+      if (!id || !item.url) return;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'library-pick' + (selectedLibrary.indexOf(id) >= 0 ? ' is-selected' : '');
+      btn.setAttribute('data-id', id);
+      btn.setAttribute('data-url', item.url);
+      btn.title = item.name || 'Saved photo';
+      var img = document.createElement('img');
+      img.src = item.url;
+      img.alt = item.name || 'Saved photo';
+      img.loading = 'lazy';
+      btn.appendChild(img);
+      btn.addEventListener('click', function () {
+        var on = selectedLibrary.indexOf(id) < 0;
+        toggleLibrarySelection(id, item.url, item.name || 'Saved photo', on);
+        btn.classList.toggle('is-selected', on);
+        updatePickerCountLabel();
+      });
+      pickerGrid.appendChild(btn);
+    });
+  }
+
+  function loadPickerPage(page, append) {
+    if (pickerLoading) return;
+    pickerLoading = true;
+    if (pickerLoadMore) {
+      pickerLoadMore.disabled = true;
+      pickerLoadMore.textContent = 'Loading…';
+    }
+    var url = PICKER_URL + '?page=' + encodeURIComponent(page) + '&page_size=24';
+    if (pickerQuery) url += '&q=' + encodeURIComponent(pickerQuery);
+
+    fetch(url, {
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+    })
+      .then(parseJsonResponse)
+      .then(function (result) {
+        if (!result.ok || !result.data.ok) {
+          throw new Error((result.data && result.data.error) || 'Could not load photos.');
+        }
+        var data = result.data;
+        if (!append && pickerGrid) pickerGrid.innerHTML = '';
+        appendPickerItems(data.items || []);
+        pickerPage = data.page || page;
+        pickerHasMore = !!data.has_more;
+        if (pickerEmpty) {
+          pickerEmpty.hidden = !!(data.items && data.items.length) || !!(append && pickerGrid && pickerGrid.children.length);
+          if (!(data.items && data.items.length) && !append) {
+            pickerEmpty.textContent = pickerQuery
+              ? 'No photos match that search.'
+              : 'No saved photos yet. Upload from your device first.';
+          }
+        }
+        if (pickerLoadMore) {
+          pickerLoadMore.hidden = !pickerHasMore;
+          pickerLoadMore.disabled = false;
+          pickerLoadMore.textContent = 'Load more';
+        }
+        updatePickerCountLabel(data.total);
+      })
+      .catch(function (err) {
+        if (pickerEmpty) {
+          pickerEmpty.hidden = false;
+          pickerEmpty.textContent = err.message || 'Could not load photos.';
+        }
+        if (pickerLoadMore) {
+          pickerLoadMore.disabled = false;
+          pickerLoadMore.textContent = 'Load more';
+        }
+      })
+      .finally(function () {
+        pickerLoading = false;
+      });
+  }
+
+  function openMediaPicker() {
+    if (!pickerModal) return;
+    pickerModal.hidden = false;
+    document.body.classList.add('media-picker-open');
+    pickerQuery = '';
+    if (pickerSearch) pickerSearch.value = '';
+    pickerPage = 1;
+    loadPickerPage(1, false);
+    if (pickerSearch) setTimeout(function () { pickerSearch.focus(); }, 50);
+  }
+
+  function closeMediaPicker() {
+    if (!pickerModal) return;
+    pickerModal.hidden = true;
+    document.body.classList.remove('media-picker-open');
   }
 
   if (uploadBtn && galleryInput) {
@@ -1300,10 +1482,35 @@
   }
   if (chooseSavedBtn) {
     chooseSavedBtn.addEventListener('click', function () {
-      setSavedPanelOpen(!savedPanel || savedPanel.hidden);
+      if (chooseSavedBtn.disabled) return;
+      openMediaPicker();
     });
   }
-  if (selectedLibrary.length) setSavedPanelOpen(true);
+  if (pickerModal) {
+    pickerModal.querySelectorAll('.js-media-picker-close').forEach(function (el) {
+      el.addEventListener('click', closeMediaPicker);
+    });
+  }
+  if (pickerDone) pickerDone.addEventListener('click', closeMediaPicker);
+  if (pickerLoadMore) {
+    pickerLoadMore.addEventListener('click', function () {
+      if (!pickerHasMore) return;
+      loadPickerPage(pickerPage + 1, true);
+    });
+  }
+  if (pickerSearch) {
+    pickerSearch.addEventListener('input', function () {
+      clearTimeout(pickerSearchTimer);
+      pickerSearchTimer = setTimeout(function () {
+        pickerQuery = (pickerSearch.value || '').trim();
+        pickerPage = 1;
+        loadPickerPage(1, false);
+      }, 280);
+    });
+  }
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && pickerModal && !pickerModal.hidden) closeMediaPicker();
+  });
 
   renderPreviewPhotos();
   updateText();
