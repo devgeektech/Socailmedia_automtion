@@ -62,34 +62,31 @@
         </div>
       </div>
 
-      <div class="form-group">
-        <label class="form-label">From your gallery</label>
-        <p class="platform-note" style="margin-bottom:0.65rem;">Add photos from your phone or computer. You can pick several to share together.</p>
-        <input type="file" name="carousel_files" id="id_carousel_files" class="glass-input" accept="image/*" multiple>
-        <div class="gallery-upload-thumbs" id="gallery-upload-thumbs" hidden></div>
-      </div>
-
-      {% comment %} <div class="form-group">
-        <label class="form-label">Saved photos</label>
-        <p class="platform-note" style="margin-bottom:0.65rem;">Use photos you’ve already saved. Tap more than one to include them in the same post. <a href="{% url 'posts:media_library' %}">Browse saved photos</a></p>
-        {% if library_assets %}
-        <div class="library-picker" id="library-picker">
-          {% for asset in library_assets %}
-          <button type="button" class="library-pick" data-id="{{ asset.pk }}" data-url="{{ asset.file.url }}" data-kind="image" title="{{ asset.original_name|default:'Image' }}">
-            <img src="{{ asset.file.url }}" alt="">
-          </button>
-          {% endfor %}
+      <div class="form-group photo-source-group">
+        <label class="form-label">Photos</label>
+        <p class="platform-note" style="margin-bottom:0.75rem;">Upload new photos, or choose ones you’ve already saved. Tap more than one to post them together.</p>
+        <div class="photo-source-actions">
+          <button type="button" class="btn-secondary photo-source-btn" id="btn-upload-photos">Upload from device</button>
+          <button type="button" class="btn-secondary photo-source-btn" id="btn-choose-saved" aria-expanded="false" aria-controls="saved-photos-panel">Choose saved photos</button>
         </div>
-        <p class="platform-note" id="library-pick-status" aria-live="polite"></p>
-        {% else %}
-        <p class="platform-note">No saved photos yet — generate or upload above.</p>
-        {% endif %}
-        {% if is_edit %}
-        <label class="clear-media" style="margin-top:0.85rem;">
-          {{ form.regenerate_image }} {{ form.regenerate_image.label }}
-        </label>
-        {% endif %}
-      </div> {% endcomment %}
+        <input type="file" name="carousel_files" id="id_carousel_files" class="photo-file-input" accept="image/*" multiple>
+        <div class="gallery-upload-thumbs" id="gallery-upload-thumbs" hidden></div>
+        <div class="saved-photos-panel" id="saved-photos-panel" hidden>
+          {% if library_assets %}
+          <p class="platform-note" id="library-pick-status" aria-live="polite" data-empty="Tap a photo to add it. Tap again to remove it.">Tap a photo to add it. Tap again to remove it.</p>
+          <div class="library-picker" id="library-picker">
+            {% for asset in library_assets %}
+            <button type="button" class="library-pick" data-id="{{ asset.pk }}" data-url="{{ asset.file.url }}" data-kind="image" title="{{ asset.original_name|default:'Saved photo' }}">
+              <img src="{{ asset.file.url }}" alt="{{ asset.original_name|default:'Saved photo' }}" loading="lazy">
+            </button>
+            {% endfor %}
+          </div>
+          {% else %}
+          <p class="platform-note" id="library-pick-status" data-empty="No saved photos yet. Upload from your device, or generate with AI above.">No saved photos yet. Upload from your device, or generate with AI above.</p>
+          {% endif %}
+        </div>
+        <div hidden>{{ form.regenerate_image }}</div>
+      </div>
 
       <fieldset class="publish-fieldset">
         <legend class="form-label">Publishing</legend>
@@ -516,9 +513,13 @@
 
   function syncLibraryStatus() {
     if (!libraryStatus) return;
-    if (!selectedLibrary.length) libraryStatus.textContent = '';
-    else if (selectedLibrary.length === 1) libraryStatus.textContent = 'Selected 1 saved photo.';
-    else libraryStatus.textContent = 'Selected ' + selectedLibrary.length + ' photos for this post.';
+    if (!selectedLibrary.length) {
+      libraryStatus.textContent = libraryStatus.getAttribute('data-empty') || 'Tap a photo to add it. Tap again to remove it.';
+    } else if (selectedLibrary.length === 1) {
+      libraryStatus.textContent = '1 saved photo selected.';
+    } else {
+      libraryStatus.textContent = selectedLibrary.length + ' saved photos selected.';
+    }
   }
 
   function setHidden(el, isHidden) {
@@ -1197,9 +1198,6 @@
         if (id) libIdSet[id] = true;
       });
     }
-    existingPreviewItems.forEach(function (item) {
-      if (item && item.asset_id) libIdSet[String(item.asset_id)] = true;
-    });
 
     selectedLibrary = [];
     document.querySelectorAll('.library-pick').forEach(function (btn) {
@@ -1280,6 +1278,32 @@
       rebuildPreviewFromSelections();
     });
   });
+
+  var uploadBtn = document.getElementById('btn-upload-photos');
+  var chooseSavedBtn = document.getElementById('btn-choose-saved');
+  var savedPanel = document.getElementById('saved-photos-panel');
+
+  function setSavedPanelOpen(open) {
+    if (!savedPanel) return;
+    savedPanel.hidden = !open;
+    if (chooseSavedBtn) {
+      chooseSavedBtn.classList.toggle('is-open', open);
+      chooseSavedBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      chooseSavedBtn.textContent = open ? 'Hide saved photos' : 'Choose saved photos';
+    }
+  }
+
+  if (uploadBtn && galleryInput) {
+    uploadBtn.addEventListener('click', function () {
+      galleryInput.click();
+    });
+  }
+  if (chooseSavedBtn) {
+    chooseSavedBtn.addEventListener('click', function () {
+      setSavedPanelOpen(!savedPanel || savedPanel.hidden);
+    });
+  }
+  if (selectedLibrary.length) setSavedPanelOpen(true);
 
   renderPreviewPhotos();
   updateText();

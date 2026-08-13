@@ -378,7 +378,7 @@ def _post_form_context(request, form, *, is_edit, post=None, page_title='Create 
         MediaAsset.objects.filter(
             user=request.user,
             kind=MediaAsset.KIND_IMAGE,
-        )[:24]
+        )[:48]
     )
     by_id = {a.pk: a for a in recent}
     for asset in MediaAsset.objects.filter(
