@@ -43,6 +43,9 @@ def dashboard_view(request):
         messages.info(request, 'Choose a plan to unlock your dashboard.')
         return redirect('subscriptions:plans')
 
+    from django.db.models import Q
+    from django.utils.dateparse import parse_date
+
     from posts.models import Post
     from posts.publisher import publish_due_posts
 
@@ -58,6 +61,39 @@ def dashboard_view(request):
         'failed': posts.filter(status=Post.STATUS_FAILED).count(),
     }
 
+    q = (request.GET.get('q') or '').strip()
+    status = (request.GET.get('status') or '').strip()
+    platform = (request.GET.get('platform') or '').strip().lower()
+    date_from = parse_date((request.GET.get('date_from') or '').strip() or '')
+    date_to = parse_date((request.GET.get('date_to') or '').strip() or '')
+
+    filtered = posts
+    if q:
+        filtered = filtered.filter(
+            Q(caption__icontains=q)
+            | Q(description__icontains=q)
+            | Q(image_prompt__icontains=q)
+        )
+    if status in {
+        Post.STATUS_DRAFT,
+        Post.STATUS_SCHEDULED,
+        Post.STATUS_PUBLISHED,
+        Post.STATUS_FAILED,
+    }:
+        filtered = filtered.filter(status=status)
+    if platform == 'facebook':
+        filtered = filtered.filter(
+            Q(publish_to_facebook=True) | Q(facebook_post_id__gt='')
+        )
+    elif platform == 'instagram':
+        filtered = filtered.filter(
+            Q(publish_to_instagram=True) | Q(instagram_media_id__gt='')
+        )
+    if date_from:
+        filtered = filtered.filter(created_at__date__gte=date_from)
+    if date_to:
+        filtered = filtered.filter(created_at__date__lte=date_to)
+
     from accounts.models import UserProfile
     from posts.meta import (
         facebook_publish_ready,
@@ -71,11 +107,18 @@ def dashboard_view(request):
 
     return render(request, 'subscriptions/dashboard.html', {
         'subscription': sub,
-        'posts': posts[:50],
+        'posts': filtered.prefetch_related('media_items__asset')[:50],
         'stats': stats,
         'profile': profile,
         'meta_connected': profile.meta_connected,
         'facebook_ready': fb_ready,
         'instagram_ready': ig_ready,
         'meta_app_configured': meta_configured(),
+        'filters': {
+            'q': q,
+            'status': status,
+            'platform': platform,
+            'date_from': request.GET.get('date_from') or '',
+            'date_to': request.GET.get('date_to') or '',
+        },
     })

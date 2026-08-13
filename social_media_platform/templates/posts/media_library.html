@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block title %}Media Library — SocialFlow{% endblock %}
+{% block wrapper_class %}dashboard-wrapper{% endblock %}
+{% block content %}
+<div class="dashboard-layout">
+  <div class="dashboard-header">
+    <div>
+      <a href="{% url 'subscriptions:dashboard' %}" class="logo" style="margin-bottom:0.5rem;">
+        <div class="logo-icon">◈</div>
+        <span class="logo-text">SocialFlow</span>
+      </a>
+      <h1 class="dashboard-title">Media Library</h1>
+    </div>
+    <div class="dashboard-actions">
+      <a href="{% url 'posts:create' %}" class="btn-primary">Create post</a>
+      <a href="{% url 'subscriptions:dashboard' %}" class="btn-secondary">Dashboard</a>
+    </div>
+  </div>
+
+  <div class="glass-card">
+    <h2 class="posts-section-title" style="margin-bottom:0.75rem;">Upload</h2>
+    <p class="platform-note" style="margin-bottom:1rem;">Store images to reuse across posts, carousels, and schedules.</p>
+    <form method="post" action="{% url 'posts:media_upload' %}" enctype="multipart/form-data" class="media-upload-form">
+      {% csrf_token %}
+      <input type="file" name="files" class="glass-input" accept="image/*" multiple required>
+      <button type="submit" class="btn-primary">Add to library</button>
+    </form>
+  </div>
+
+  <div class="posts-section-header" style="margin-top:1.5rem;">
+    <h2 class="posts-section-title">Your images</h2>
+  </div>
+
+  {% if assets %}
+  <div class="media-grid">
+    {% for asset in assets %}
+    <article class="glass-card media-card">
+      <div class="media-card-preview">
+        <img src="{{ asset.file.url }}" alt="{{ asset.original_name }}">
+      </div>
+      <div class="media-card-meta">
+        <span class="chip">{{ asset.get_source_display }}</span>
+        <small>{{ asset.created_at|date:"M d, Y" }}</small>
+      </div>
+      <form method="post" action="{% url 'posts:media_delete' asset.pk %}" onsubmit="return confirm('Remove this file from your library?');">
+        {% csrf_token %}
+        <button type="submit" class="btn-secondary btn-sm">Delete</button>
+      </form>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="glass-card empty-state">
+    <p>No images yet. Upload files or generate AI images while creating a post.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

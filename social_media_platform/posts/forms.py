@@ -33,10 +33,18 @@ class PostForm(forms.ModelForm):
         initial=False,
         label='Regenerate AI image with this prompt',
     )
-    # Relative media path from AJAX generate step (e.g. posts/ai_temp/...)
     generated_image_path = forms.CharField(
         required=False,
         widget=forms.HiddenInput(attrs={'id': 'id_generated_image_path'}),
+    )
+    # Comma-separated AI temp paths for multi-select / carousel
+    generated_image_paths = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(attrs={'id': 'id_generated_image_paths'}),
+    )
+    library_asset_ids = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(attrs={'id': 'id_library_asset_ids'}),
     )
 
     class Meta:
@@ -83,7 +91,7 @@ class PostForm(forms.ModelForm):
         self.user = user
         self.draft_mode = draft_mode
         instance = kwargs.get('instance')
-        self.fields['image_prompt'].required = not (instance and instance.pk and instance.image)
+        self.fields['image_prompt'].required = False
 
         if instance and instance.scheduled_at and instance.status == Post.STATUS_SCHEDULED:
             self.fields['publish_action'].initial = self.SCHEDULE
@@ -102,7 +110,6 @@ class PostForm(forms.ModelForm):
                 'Connect Facebook from Social Connections first.'
             )
         elif not instance:
-            # New posts: Facebook selected by default when connected
             self.fields['publish_to_facebook'].initial = True
         if not ig_ready:
             self.fields['publish_to_instagram'].disabled = True
@@ -120,6 +127,26 @@ class PostForm(forms.ModelForm):
             else:
                 self.fields['publish_action'].initial = self.PUBLISH_NOW
 
+    def _has_media(self, cleaned):
+        instance = self.instance if self.instance and self.instance.pk else None
+        generated_path = (cleaned.get('generated_image_path') or '').strip()
+        generated_paths = (cleaned.get('generated_image_paths') or '').strip()
+        library_ids = (cleaned.get('library_asset_ids') or '').strip()
+        carousel_files = self.files.getlist('carousel_files') if getattr(self, 'files', None) else []
+        has_existing = bool(
+            instance and (
+                instance.image
+                or instance.media_items.exists()
+            )
+        )
+        return bool(
+            generated_path
+            or generated_paths
+            or library_ids
+            or carousel_files
+            or has_existing
+        )
+
     def clean(self):
         cleaned = super().clean()
         if getattr(self, 'draft_mode', False):
@@ -127,9 +154,6 @@ class PostForm(forms.ModelForm):
 
         action = cleaned.get('publish_action')
         scheduled_at = cleaned.get('scheduled_at')
-        image_prompt = (cleaned.get('image_prompt') or '').strip()
-        generated_path = (cleaned.get('generated_image_path') or '').strip()
-        instance = self.instance if self.instance and self.instance.pk else None
 
         if action == self.SCHEDULE:
             if not scheduled_at:
@@ -144,14 +168,12 @@ class PostForm(forms.ModelForm):
                 if scheduled_at <= timezone.now():
                     self.add_error('scheduled_at', 'Schedule time must be in the future.')
 
-        needs_image = not instance or not instance.image or cleaned.get('regenerate_image')
-        if needs_image and not image_prompt and not generated_path:
+        if not self._has_media(cleaned):
             self.add_error(
                 'image_prompt',
-                'Enter a prompt and generate an AI image for this post.',
+                'Add media: generate AI images (select one or more), pick from the library, or upload from your gallery.',
             )
 
-        # Disabled checkboxes are omitted from POST — keep False when not ready
         from .meta import facebook_publish_ready, instagram_publish_ready
 
         if not (self.user and facebook_publish_ready(self.user)):
@@ -162,16 +184,14 @@ class PostForm(forms.ModelForm):
         return cleaned
 
     def _clean_draft(self, cleaned):
-        """Save draft — no image or schedule required."""
         instance = self.instance if self.instance and self.instance.pk else None
         description = (cleaned.get('description') or '').strip()
         caption = (cleaned.get('caption') or '').strip()
         image_prompt = (cleaned.get('image_prompt') or '').strip()
-        generated_path = (cleaned.get('generated_image_path') or '').strip()
-        has_image = bool(instance and instance.image)
+        has_media = self._has_media(cleaned)
 
-        if not any([description, caption, image_prompt, generated_path, has_image]):
-            raise forms.ValidationError('Add some text or an image before saving a draft.')
+        if not any([description, caption, image_prompt, has_media]):
+            raise forms.ValidationError('Add some text or media before saving a draft.')
 
         scheduled_at = cleaned.get('scheduled_at')
         if scheduled_at and timezone.is_naive(scheduled_at):
@@ -190,7 +210,6 @@ class PostForm(forms.ModelForm):
         return cleaned
 
     def save_draft(self, post):
-        """Persist post as draft without publishing."""
         post.status = Post.STATUS_DRAFT
         post.published_at = None
         action = self.cleaned_data.get('publish_action')
@@ -202,10 +221,6 @@ class PostForm(forms.ModelForm):
         return post
 
     def apply_publish_action(self, post):
-        """
-        Publish now → send to selected platforms (Facebook/Instagram) immediately.
-        Schedule → save for the background publisher at scheduled_at (no manual click).
-        """
         from .meta import MetaAPIError
         from .publisher import publish_post
 

@@ -17,9 +17,11 @@
   </div>
 
   <div class="post-composer">
-    <form method="post" class="glass-card post-form-card" id="post-form" novalidate>
+    <form method="post" enctype="multipart/form-data" class="glass-card post-form-card" id="post-form" novalidate>
       {% csrf_token %}
       {{ form.generated_image_path }}
+      {{ form.generated_image_paths }}
+      {{ form.library_asset_ids }}
       <input type="hidden" name="save_draft" id="id_save_draft" value="">
 
       {% if form.non_field_errors %}
@@ -40,7 +42,7 @@
 
       <div class="form-group ai-image-group">
         <label class="form-label" for="{{ form.image_prompt.id_for_label }}">{{ form.image_prompt.label }}</label>
-        <p class="platform-note" style="margin-bottom:0.65rem;">Describe what you want — we create 3 options and you pick one. No uploads.</p>
+        <p class="platform-note" style="margin-bottom:0.65rem;">Generate 3 options, then select one or more for a single post or carousel.</p>
         {{ form.image_prompt }}
         {% if form.image_prompt.errors %}<p class="form-error">{{ form.image_prompt.errors.0 }}</p>{% endif %}
         <div class="ai-image-actions">
@@ -54,10 +56,44 @@
           <span class="ai-status" id="ai-status" aria-live="polite"></span>
         </div>
         <div class="ai-image-picker" id="ai-image-picker" hidden>
-          <p class="platform-note ai-picker-hint">Select one image for your post</p>
+          <p class="platform-note ai-picker-hint">Tap images to select — pick several for a carousel</p>
           <div class="ai-image-options" id="ai-image-options"></div>
         </div>
-        {% if is_edit and post.image %}
+        {% if is_edit and existing_preview_urls %}
+        <div class="current-image-preview">
+          <p class="platform-note">{% if existing_preview_urls|length > 1 %}Current carousel ({{ existing_preview_urls|length }} images){% else %}Current image{% endif %}</p>
+          <div class="current-carousel-thumbs">
+            {% for url in existing_preview_urls %}
+            <img src="{{ url }}" alt="Slide {{ forloop.counter }}" class="current-post-thumb">
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">From your gallery</label>
+        <p class="platform-note" style="margin-bottom:0.65rem;">Upload one or more images from your device for a single post or carousel.</p>
+        <input type="file" name="carousel_files" id="id_carousel_files" class="glass-input" accept="image/*" multiple>
+        <div class="gallery-upload-thumbs" id="gallery-upload-thumbs" hidden></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Media Library</label>
+        <p class="platform-note" style="margin-bottom:0.65rem;">Reuse saved images. Select multiple for a carousel. <a href="{% url 'posts:media_library' %}">Open library</a></p>
+        {% if library_assets %}
+        <div class="library-picker" id="library-picker">
+          {% for asset in library_assets %}
+          <button type="button" class="library-pick" data-id="{{ asset.pk }}" data-url="{{ asset.file.url }}" data-kind="image" title="{{ asset.original_name|default:'Image' }}">
+            <img src="{{ asset.file.url }}" alt="">
+          </button>
+          {% endfor %}
+        </div>
+        <p class="platform-note" id="library-pick-status" aria-live="polite"></p>
+        {% else %}
+        <p class="platform-note">No saved images yet — generate or upload above.</p>
+        {% endif %}
+        {% if is_edit %}
         <label class="clear-media" style="margin-top:0.85rem;">
           {{ form.regenerate_image }} {{ form.regenerate_image.label }}
         </label>
@@ -193,15 +229,21 @@
           </div>
         </div>
         <div class="social-preview-media{% if is_edit and post.image %} has-image{% endif %}" id="preview-media">
-          <div class="preview-media-placeholder" id="preview-placeholder" {% if is_edit and post.image %}hidden{% endif %}>AI image preview</div>
-          <img
-            src="{% if is_edit and post.image %}{{ post.image.url }}{% endif %}"
-            alt=""
-            id="preview-image"
-            class="preview-media-el"
-            {% if not is_edit or not post.image %}hidden{% endif %}
-          >
+          <div class="preview-media-placeholder" id="preview-placeholder" {% if is_edit and post.image %}hidden{% endif %}>Image / carousel preview</div>
+          <div class="preview-carousel" id="preview-carousel" {% if not is_edit or not post.image %}hidden{% endif %}>
+            <button type="button" class="preview-carousel-nav preview-carousel-prev" id="preview-carousel-prev" aria-label="Previous" hidden>‹</button>
+            <img
+              src="{% if is_edit and post.image %}{{ post.image.url }}{% endif %}"
+              alt=""
+              id="preview-image"
+              class="preview-media-el"
+            >
+            <button type="button" class="preview-carousel-nav preview-carousel-next" id="preview-carousel-next" aria-label="Next" hidden>›</button>
+            <div class="preview-carousel-dots" id="preview-carousel-dots" hidden></div>
+            <span class="preview-carousel-count" id="preview-carousel-count" hidden></span>
+          </div>
         </div>
+        <div class="preview-carousel-strip" id="preview-carousel-strip" hidden></div>
         <div class="social-preview-text">
           <p class="social-preview-caption" id="preview-caption">{% if is_edit %}{{ post.caption }}{% endif %}</p>
           <p class="social-preview-body" id="preview-description">{% if is_edit %}{{ post.description }}{% endif %}</p>
@@ -211,6 +253,7 @@
     </aside>
   </div>
 </div>
+{{ existing_preview_urls|json_script:"existing-preview-urls" }}
 {% endblock %}
 
 {% block extra_js %}
@@ -263,6 +306,7 @@
       (draft.caption && String(draft.caption).trim()) ||
       (draft.image_prompt && String(draft.image_prompt).trim()) ||
       (draft.generated_image_path && String(draft.generated_image_path).trim()) ||
+      (draft.generated_image_paths && String(draft.generated_image_paths).trim()) ||
       (draft.preview_image_url && String(draft.preview_image_url).trim()) ||
       (Array.isArray(draft.images) && draft.images.length > 0) ||
       (draft.scheduled_at && String(draft.scheduled_at).trim()) ||
@@ -285,6 +329,7 @@
       caption: caption ? caption.value : '',
       image_prompt: imagePrompt ? imagePrompt.value : '',
       generated_image_path: generatedPath ? generatedPath.value : '',
+      generated_image_paths: generatedPaths ? generatedPaths.value : '',
       scheduled_at: scheduledAt ? scheduledAt.value : '',
       publish_action: publishAction ? publishAction.value : 'publish_now',
       publish_to_facebook: !!(fb && fb.checked),
@@ -327,6 +372,7 @@
       if (caption && !caption.value && draft.caption) caption.value = draft.caption;
       if (imagePrompt && !imagePrompt.value && draft.image_prompt) imagePrompt.value = draft.image_prompt;
       if (generatedPath && draft.generated_image_path) generatedPath.value = draft.generated_image_path;
+      if (generatedPaths && draft.generated_image_paths) generatedPaths.value = draft.generated_image_paths;
       if (scheduledAt && draft.scheduled_at) scheduledAt.value = draft.scheduled_at;
       if (draft.publish_action) {
         var radio = document.querySelector('input[name="publish_action"][value="' + draft.publish_action + '"]');
@@ -338,10 +384,16 @@
       if (ig && !ig.disabled && typeof draft.publish_to_instagram === 'boolean') ig.checked = draft.publish_to_instagram;
       if (draft.images && draft.images.length && optionsEl) {
         renderOptions(draft.images);
-        if (draft.generated_image_path) {
-          var selected = optionsEl.querySelector('.ai-image-option[data-path="' + draft.generated_image_path + '"]');
-          if (selected) selectOption(selected, selected.dataset.path, selected.dataset.url);
+        var pathList = [];
+        if (draft.generated_image_paths) {
+          pathList = String(draft.generated_image_paths).split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        } else if (draft.generated_image_path) {
+          pathList = [draft.generated_image_path];
         }
+        pathList.forEach(function (path) {
+          var selected = optionsEl.querySelector('.ai-image-option[data-path="' + path + '"]');
+          if (selected) toggleAiOption(selected);
+        });
       } else if (draft.preview_image_url) {
         showImage(draft.preview_image_url);
       }
@@ -361,45 +413,84 @@
     } catch (err) { /* ignore */ }
   }
 
-  function setGenerating(isLoading) {
-    if (formLocked) return;
-    if (generateBtn) generateBtn.disabled = !!isLoading;
-    if (genBtnLabel) genBtnLabel.hidden = !!isLoading;
-    if (genBtnLoading) genBtnLoading.hidden = !isLoading;
-    if (generateBtn) generateBtn.classList.toggle('is-loading', !!isLoading);
+  var deleteDraftBtn = document.getElementById('btn-delete-draft');
+  var deleteDraftForm = document.getElementById('delete-draft-form');
+  var pendingAction = null;
+
+  function setActionBusy(isBusy, activeId) {
+    var busy = !!isBusy;
+    if (submitBtn) {
+      submitBtn.disabled = busy;
+      submitBtn.classList.toggle('is-loading', busy && activeId === 'btn-submit-post');
+      submitBtn.classList.toggle('is-disabled', busy && activeId !== 'btn-submit-post');
+    }
+    if (submitBtnLabel) submitBtnLabel.hidden = busy && activeId === 'btn-submit-post';
+    if (submitBtnLoading) submitBtnLoading.hidden = !(busy && activeId === 'btn-submit-post');
+
+    if (saveDraftBtn) {
+      saveDraftBtn.disabled = busy;
+      saveDraftBtn.classList.toggle('is-loading', busy && activeId === 'btn-save-draft');
+      saveDraftBtn.classList.toggle('is-disabled', busy && activeId !== 'btn-save-draft');
+    }
+    if (draftBtnLabel) draftBtnLabel.hidden = busy && activeId === 'btn-save-draft';
+    if (draftBtnLoading) draftBtnLoading.hidden = !(busy && activeId === 'btn-save-draft');
+
+    if (generateBtn) {
+      generateBtn.disabled = busy;
+      generateBtn.classList.toggle('is-loading', busy && activeId === 'btn-generate-image');
+      generateBtn.classList.toggle('is-disabled', busy && activeId !== 'btn-generate-image');
+    }
+    if (genBtnLabel) genBtnLabel.hidden = busy && activeId === 'btn-generate-image';
+    if (genBtnLoading) genBtnLoading.hidden = !(busy && activeId === 'btn-generate-image');
+
+    if (deleteDraftBtn) {
+      deleteDraftBtn.disabled = busy;
+      deleteDraftBtn.classList.toggle('is-disabled', busy);
+    }
+    if (cancelBtn) {
+      cancelBtn.classList.toggle('is-disabled', busy);
+      if (busy) cancelBtn.setAttribute('aria-disabled', 'true');
+      else cancelBtn.removeAttribute('aria-disabled');
+    }
   }
 
   function lockForm(mode) {
     formLocked = true;
-    if (mode === 'draft') {
-      setSavingDraft(true);
+    pendingAction = mode || pendingAction;
+    var activeId = 'btn-submit-post';
+    if (pendingAction === 'draft') activeId = 'btn-save-draft';
+    else if (pendingAction === 'generate') activeId = 'btn-generate-image';
+    else if (pendingAction === 'delete') activeId = 'btn-delete-draft';
+    setActionBusy(true, activeId);
+  }
+
+  function unlockForm() {
+    if (formLocked && pendingAction !== 'generate') return;
+    formLocked = false;
+    pendingAction = null;
+    setActionBusy(false, null);
+  }
+
+  function setGenerating(isLoading) {
+    if (formLocked && pendingAction !== 'generate') return;
+    if (isLoading) {
+      pendingAction = 'generate';
+      formLocked = true;
+      setActionBusy(true, 'btn-generate-image');
     } else {
-      setPublishing(true);
+      formLocked = false;
+      pendingAction = null;
+      setActionBusy(false, null);
+      if (generateBtn) generateBtn.classList.remove('is-loading');
     }
   }
 
   function setPublishing(isLoading) {
-    if (submitBtn) {
-      submitBtn.disabled = !!isLoading;
-      submitBtn.classList.toggle('is-loading', !!isLoading);
-    }
-    if (submitBtnLabel) submitBtnLabel.hidden = !!isLoading;
-    if (submitBtnLoading) submitBtnLoading.hidden = !isLoading;
-    if (saveDraftBtn) saveDraftBtn.disabled = !!isLoading;
-    if (cancelBtn) cancelBtn.classList.toggle('is-disabled', !!isLoading);
-    if (generateBtn) generateBtn.disabled = !!isLoading;
+    if (isLoading) lockForm('publish');
   }
 
   function setSavingDraft(isLoading) {
-    if (saveDraftBtn) {
-      saveDraftBtn.disabled = !!isLoading;
-      saveDraftBtn.classList.toggle('is-loading', !!isLoading);
-    }
-    if (draftBtnLabel) draftBtnLabel.hidden = !!isLoading;
-    if (draftBtnLoading) draftBtnLoading.hidden = !isLoading;
-    if (submitBtn) submitBtn.disabled = !!isLoading;
-    if (cancelBtn) cancelBtn.classList.toggle('is-disabled', !!isLoading);
-    if (generateBtn) generateBtn.disabled = !!isLoading;
+    if (isLoading) lockForm('draft');
   }
 
   function parseJsonResponse(res) {
@@ -421,47 +512,193 @@
     });
   }
 
-  function showImage(url, sourceImg) {
-    if (!url && !(sourceImg && (sourceImg.currentSrc || sourceImg.src))) return;
-    var media = document.getElementById('preview-media');
-    if (previewPlaceholder) {
-      previewPlaceholder.setAttribute('hidden', 'hidden');
-      previewPlaceholder.style.display = 'none';
-    }
-    if (previewImage) {
-      previewImage.removeAttribute('hidden');
-      previewImage.hidden = false;
-      previewImage.style.display = 'block';
-      previewImage.alt = 'Selected post image';
-      if (sourceImg && sourceImg.complete && sourceImg.naturalWidth) {
-        previewImage.src = sourceImg.currentSrc || sourceImg.src;
-      } else {
-        previewImage.src = url;
-      }
-    }
-    if (media) media.classList.add('has-image');
+  var generatedPaths = document.getElementById('id_generated_image_paths');
+  var previewCarousel = document.getElementById('preview-carousel');
+  var previewCarouselDots = document.getElementById('preview-carousel-dots');
+  var previewCarouselCount = document.getElementById('preview-carousel-count');
+  var previewCarouselPrev = document.getElementById('preview-carousel-prev');
+  var previewCarouselNext = document.getElementById('preview-carousel-next');
+  var previewCarouselStrip = document.getElementById('preview-carousel-strip');
+  var galleryInput = document.getElementById('id_carousel_files');
+  var galleryThumbs = document.getElementById('gallery-upload-thumbs');
+  var carouselUrls = [];
+  var carouselIndex = 0;
+  var selectedAi = [];
+  var existingPreviewUrls = [];
+  try {
+    var existingEl = document.getElementById('existing-preview-urls');
+    existingPreviewUrls = existingEl ? JSON.parse(existingEl.textContent) : [];
+    if (!Array.isArray(existingPreviewUrls)) existingPreviewUrls = [];
+  } catch (err) {
+    existingPreviewUrls = [];
   }
 
-  function selectOption(btn, path, url) {
-    if (!btn || !optionsEl) return;
-    optionsEl.querySelectorAll('.ai-image-option').forEach(function (el) {
-      el.classList.remove('is-selected');
-      el.setAttribute('aria-pressed', 'false');
+  function setHidden(el, isHidden) {
+    if (!el) return;
+    if (isHidden) el.setAttribute('hidden', 'hidden');
+    else el.removeAttribute('hidden');
+  }
+
+  function syncGeneratedPaths() {
+    if (generatedPaths) generatedPaths.value = selectedAi.map(function (x) { return x.path; }).join(',');
+    // Keep first selected path too (compat + single-image publish paths)
+    if (generatedPath) generatedPath.value = selectedAi.length ? selectedAi[0].path : '';
+  }
+
+  function setCarouselUrls(urls) {
+    var next = (urls || []).filter(Boolean);
+    var changed = next.length !== carouselUrls.length || next.some(function (u, i) { return u !== carouselUrls[i]; });
+    carouselUrls = next;
+    if (changed) carouselIndex = 0;
+    if (carouselIndex >= carouselUrls.length) carouselIndex = 0;
+    renderCarousel();
+  }
+
+  function renderCarousel() {
+    var media = document.getElementById('preview-media');
+    var has = carouselUrls.length > 0;
+    var multi = carouselUrls.length > 1;
+
+    setHidden(previewPlaceholder, has);
+    if (previewPlaceholder) previewPlaceholder.style.display = has ? 'none' : '';
+    setHidden(previewCarousel, !has);
+    if (media) media.classList.toggle('has-image', has);
+    if (previewCarousel) previewCarousel.classList.toggle('is-multi', multi);
+
+    if (!has || !previewImage) {
+      setHidden(previewCarouselPrev, true);
+      setHidden(previewCarouselNext, true);
+      setHidden(previewCarouselDots, true);
+      setHidden(previewCarouselCount, true);
+      setHidden(previewCarouselStrip, true);
+      if (previewCarouselStrip) previewCarouselStrip.innerHTML = '';
+      return;
+    }
+
+    previewImage.src = carouselUrls[carouselIndex] || carouselUrls[0];
+    previewImage.alt = multi
+      ? ('Carousel slide ' + (carouselIndex + 1) + ' of ' + carouselUrls.length)
+      : 'Post image';
+    setHidden(previewImage, false);
+    previewImage.style.display = 'block';
+
+    setHidden(previewCarouselPrev, !multi);
+    setHidden(previewCarouselNext, !multi);
+    setHidden(previewCarouselCount, !multi);
+    setHidden(previewCarouselDots, !multi);
+    if (previewCarouselCount) {
+      previewCarouselCount.textContent = (carouselIndex + 1) + ' / ' + carouselUrls.length;
+    }
+    if (previewCarouselDots) {
+      previewCarouselDots.innerHTML = '';
+      if (multi) {
+        carouselUrls.forEach(function (_, i) {
+          var dot = document.createElement('button');
+          dot.type = 'button';
+          dot.className = 'preview-carousel-dot' + (i === carouselIndex ? ' is-active' : '');
+          dot.setAttribute('aria-label', 'Slide ' + (i + 1));
+          dot.addEventListener('click', function () {
+            carouselIndex = i;
+            renderCarousel();
+          });
+          previewCarouselDots.appendChild(dot);
+        });
+      }
+    }
+
+    if (previewCarouselStrip) {
+      previewCarouselStrip.innerHTML = '';
+      if (multi) {
+        setHidden(previewCarouselStrip, false);
+        carouselUrls.forEach(function (url, i) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'preview-carousel-strip-item' + (i === carouselIndex ? ' is-active' : '');
+          btn.setAttribute('aria-label', 'Go to slide ' + (i + 1));
+          var img = document.createElement('img');
+          img.src = url;
+          img.alt = '';
+          btn.appendChild(img);
+          btn.addEventListener('click', function () {
+            carouselIndex = i;
+            renderCarousel();
+          });
+          previewCarouselStrip.appendChild(btn);
+        });
+      } else {
+        setHidden(previewCarouselStrip, true);
+      }
+    }
+  }
+
+  function rebuildPreviewFromSelections() {
+    var urls = [];
+    if (galleryThumbs) {
+      galleryThumbs.querySelectorAll('img').forEach(function (img) {
+        if (img.src) urls.push(img.src);
+      });
+    }
+    document.querySelectorAll('.library-pick.is-selected').forEach(function (btn) {
+      var u = btn.getAttribute('data-url') || (btn.querySelector('img') && btn.querySelector('img').src);
+      if (u) urls.push(u);
     });
-    btn.classList.add('is-selected');
-    btn.setAttribute('aria-pressed', 'true');
-    if (generatedPath) generatedPath.value = path || '';
-    if (regenerate) regenerate.checked = true;
+    selectedAi.forEach(function (item) {
+      if (item.url) urls.push(item.url);
+    });
+    if (!urls.length && existingPreviewUrls.length) {
+      urls = existingPreviewUrls.slice();
+    }
+    setCarouselUrls(urls);
+  }
+
+  function showImage(url, sourceImg) {
+    var src = url || (sourceImg && (sourceImg.currentSrc || sourceImg.src));
+    if (!src) return;
+    setCarouselUrls([src]);
+  }
+
+  function optionImageUrl(btn) {
+    if (!btn) return '';
     var thumb = btn.querySelector('img');
-    showImage(url || (thumb && (thumb.currentSrc || thumb.src)), thumb);
-    if (aiStatus) aiStatus.textContent = 'Image selected — save the post to keep it.';
+    return (
+      btn.getAttribute('data-url') ||
+      btn.dataset.url ||
+      (thumb && (thumb.currentSrc || thumb.src)) ||
+      ''
+    );
+  }
+
+  function toggleAiOption(btn) {
+    if (!btn || !optionsEl) return;
+    var path = btn.getAttribute('data-path') || btn.dataset.path || '';
+    var url = optionImageUrl(btn);
+    var idx = selectedAi.findIndex(function (x) { return x.path === path; });
+    if (idx >= 0) {
+      selectedAi.splice(idx, 1);
+      btn.classList.remove('is-selected');
+      btn.setAttribute('aria-pressed', 'false');
+    } else {
+      selectedAi.push({ path: path, url: url });
+      btn.classList.add('is-selected');
+      btn.setAttribute('aria-pressed', 'true');
+    }
+    syncGeneratedPaths();
+    if (regenerate) regenerate.checked = selectedAi.length > 0;
+    rebuildPreviewFromSelections();
+    if (aiStatus) {
+      if (!selectedAi.length) aiStatus.textContent = 'Select one or more images.';
+      else if (selectedAi.length === 1) aiStatus.textContent = '1 image selected.';
+      else aiStatus.textContent = selectedAi.length + ' images selected — swipe preview carousel.';
+    }
   }
 
   function renderOptions(images) {
     if (!picker || !optionsEl) return;
     optionsEl.innerHTML = '';
+    selectedAi = [];
+    syncGeneratedPaths();
     if (!images || !images.length) {
-      picker.hidden = true;
+      setHidden(picker, true);
       return;
     }
 
@@ -469,10 +706,10 @@
       var btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'ai-image-option';
-      btn.setAttribute('aria-label', 'Select image ' + (index + 1));
+      btn.setAttribute('aria-label', 'Toggle image ' + (index + 1));
       btn.setAttribute('aria-pressed', 'false');
-      btn.dataset.path = img.path || '';
-      btn.dataset.url = img.url || '';
+      btn.setAttribute('data-path', img.path || '');
+      btn.setAttribute('data-url', img.url || '');
 
       var image = document.createElement('img');
       image.src = img.url;
@@ -483,21 +720,7 @@
       optionsEl.appendChild(btn);
     });
 
-    picker.hidden = false;
-
-    var first = optionsEl.querySelector('.ai-image-option');
-    if (first) {
-      var firstImg = first.querySelector('img');
-      if (firstImg && !firstImg.complete) {
-        firstImg.addEventListener('load', function onFirst() {
-          firstImg.removeEventListener('load', onFirst);
-          if (first.classList.contains('is-selected')) {
-            selectOption(first, first.dataset.path, first.dataset.url);
-          }
-        });
-      }
-      selectOption(first, first.dataset.path, first.dataset.url);
-    }
+    setHidden(picker, false);
   }
 
   if (optionsEl) {
@@ -505,7 +728,52 @@
       var btn = event.target.closest('.ai-image-option');
       if (!btn || !optionsEl.contains(btn)) return;
       event.preventDefault();
-      selectOption(btn, btn.dataset.path, btn.dataset.url);
+      toggleAiOption(btn);
+    });
+  }
+
+  if (previewCarouselPrev) {
+    previewCarouselPrev.addEventListener('click', function () {
+      if (carouselUrls.length < 2) return;
+      carouselIndex = (carouselIndex - 1 + carouselUrls.length) % carouselUrls.length;
+      renderCarousel();
+    });
+  }
+  if (previewCarouselNext) {
+    previewCarouselNext.addEventListener('click', function () {
+      if (carouselUrls.length < 2) return;
+      carouselIndex = (carouselIndex + 1) % carouselUrls.length;
+      renderCarousel();
+    });
+  }
+
+  if (galleryInput) {
+    galleryInput.addEventListener('change', function () {
+      if (!galleryThumbs) return;
+      galleryThumbs.innerHTML = '';
+      var files = Array.prototype.slice.call(galleryInput.files || []).slice(0, 10);
+      if (!files.length) {
+        galleryThumbs.hidden = true;
+        rebuildPreviewFromSelections();
+        return;
+      }
+      galleryThumbs.hidden = false;
+      var pending = files.length;
+      files.forEach(function (file) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          var wrap = document.createElement('div');
+          wrap.className = 'gallery-upload-thumb';
+          var img = document.createElement('img');
+          img.src = e.target.result;
+          img.alt = file.name;
+          wrap.appendChild(img);
+          galleryThumbs.appendChild(wrap);
+          pending -= 1;
+          if (pending <= 0) rebuildPreviewFromSelections();
+        };
+        reader.readAsDataURL(file);
+      });
     });
   }
 
@@ -548,7 +816,7 @@
 
   document.querySelectorAll('.js-save-draft-before-leave').forEach(function (link) {
     link.addEventListener('click', function (event) {
-      if (formLocked) {
+      if (formLocked || pendingAction) {
         event.preventDefault();
         return;
       }
@@ -557,31 +825,71 @@
   });
 
   if (saveDraftBtn) {
-    saveDraftBtn.addEventListener('click', function () {
+    saveDraftBtn.addEventListener('click', function (event) {
+      if (formLocked || pendingAction) {
+        event.preventDefault();
+        return;
+      }
       if (saveDraftField) saveDraftField.value = '1';
+      pendingAction = 'draft';
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.classList.add('is-disabled');
+      }
+      if (generateBtn) {
+        generateBtn.disabled = true;
+        generateBtn.classList.add('is-disabled');
+      }
+      if (deleteDraftBtn) {
+        deleteDraftBtn.disabled = true;
+        deleteDraftBtn.classList.add('is-disabled');
+      }
+      if (cancelBtn) {
+        cancelBtn.classList.add('is-disabled');
+        cancelBtn.setAttribute('aria-disabled', 'true');
+      }
     });
   }
   if (submitBtn) {
-    submitBtn.addEventListener('click', function () {
+    submitBtn.addEventListener('click', function (event) {
+      if (formLocked || pendingAction) {
+        event.preventDefault();
+        return;
+      }
       if (saveDraftField) saveDraftField.value = '';
+      pendingAction = 'publish';
+      if (saveDraftBtn) {
+        saveDraftBtn.disabled = true;
+        saveDraftBtn.classList.add('is-disabled');
+      }
+      if (generateBtn) {
+        generateBtn.disabled = true;
+        generateBtn.classList.add('is-disabled');
+      }
+      if (deleteDraftBtn) {
+        deleteDraftBtn.disabled = true;
+        deleteDraftBtn.classList.add('is-disabled');
+      }
+      if (cancelBtn) {
+        cancelBtn.classList.add('is-disabled');
+        cancelBtn.setAttribute('aria-disabled', 'true');
+      }
     });
   }
 
-  var deleteDraftBtn = document.getElementById('btn-delete-draft');
-  var deleteDraftForm = document.getElementById('delete-draft-form');
   if (deleteDraftBtn && deleteDraftForm) {
     deleteDraftBtn.addEventListener('click', function () {
       if (formLocked) return;
       if (!window.confirm('Delete this draft? This cannot be undone.')) return;
-      formLocked = true;
-      deleteDraftBtn.disabled = true;
+      pendingAction = 'delete';
+      lockForm('delete');
       deleteDraftForm.submit();
     });
   }
 
   if (form) {
     form.addEventListener('submit', function (event) {
-      if (formLocked) {
+      if (formLocked && pendingAction !== 'draft' && pendingAction !== 'publish') {
         event.preventDefault();
         return;
       }
@@ -589,6 +897,7 @@
       var selected = document.querySelector('input[name="publish_action"]:checked');
       var submitter = event.submitter;
       var isDraftSubmit = !!(
+        pendingAction === 'draft' ||
         (submitter && submitter.getAttribute('data-action') === 'draft') ||
         (submitter && submitter.id === 'btn-save-draft')
       );
@@ -602,6 +911,9 @@
           event.preventDefault();
           if (saveDraftField) saveDraftField.value = '';
           if (aiStatus) aiStatus.textContent = '';
+          pendingAction = null;
+          formLocked = false;
+          setActionBusy(false, null);
           var errEl = document.querySelector('#schedule-field .form-error');
           if (!errEl && scheduleField) {
             errEl = document.createElement('p');
@@ -624,28 +936,29 @@
 
   document.querySelectorAll('.js-clear-draft').forEach(function (link) {
     link.addEventListener('click', function (event) {
-      if (formLocked) {
+      if (formLocked || pendingAction) {
         event.preventDefault();
         return;
       }
       clearDraft();
       if (form) form.reset();
-      if (generatedPath) generatedPath.value = '';
+      selectedAi = [];
+      selectedLibrary = [];
+      syncGeneratedPaths();
+      if (libraryIds) libraryIds.value = '';
+      if (libraryStatus) libraryStatus.textContent = '';
+      document.querySelectorAll('.library-pick.is-selected').forEach(function (btn) {
+        btn.classList.remove('is-selected');
+      });
+      if (galleryThumbs) {
+        galleryThumbs.innerHTML = '';
+        galleryThumbs.hidden = true;
+      }
       if (optionsEl) optionsEl.innerHTML = '';
       if (picker) picker.hidden = true;
       if (aiStatus) aiStatus.textContent = '';
       setGenerating(false);
-      if (previewImage) {
-        previewImage.removeAttribute('src');
-        previewImage.hidden = true;
-        previewImage.style.display = '';
-      }
-      if (previewPlaceholder) {
-        previewPlaceholder.removeAttribute('hidden');
-        previewPlaceholder.style.display = '';
-      }
-      var media = document.getElementById('preview-media');
-      if (media) media.classList.remove('has-image');
+      setCarouselUrls([]);
       if (previewDesc) {
         previewDesc.textContent = '';
         previewDesc.hidden = true;
@@ -660,7 +973,7 @@
 
   if (generateBtn) {
     generateBtn.addEventListener('click', function () {
-      if (formLocked) return;
+      if (formLocked || pendingAction) return;
       var prompt = imagePrompt ? imagePrompt.value.trim() : '';
       if (!prompt) {
         if (aiStatus) aiStatus.textContent = 'Enter an image prompt first.';
@@ -670,7 +983,8 @@
       if (aiStatus) aiStatus.textContent = '';
       if (picker) picker.hidden = true;
       if (optionsEl) optionsEl.innerHTML = '';
-      if (generatedPath) generatedPath.value = '';
+      selectedAi = [];
+      syncGeneratedPaths();
 
       var body = new FormData();
       body.append('prompt', prompt);
@@ -695,12 +1009,14 @@
             throw new Error('No images returned.');
           }
           renderOptions(imgs);
-          if (aiStatus) aiStatus.textContent = 'Images ready — pick one.';
+          rebuildPreviewFromSelections();
+          if (aiStatus) aiStatus.textContent = 'Images ready — select one or more.';
         })
         .catch(function (err) {
           if (picker) picker.hidden = true;
           if (optionsEl) optionsEl.innerHTML = '';
-          if (generatedPath) generatedPath.value = '';
+          selectedAi = [];
+          syncGeneratedPaths();
           if (aiStatus) aiStatus.textContent = err.message || 'Generation failed.';
         })
         .finally(function () {
@@ -711,10 +1027,20 @@
 
   setGenerating(false);
   restoreConnectDraft();
-  if (generatedPath && generatedPath.value && previewImage && (previewImage.hidden || !previewImage.src)) {
-    var mediaPath = generatedPath.value.replace(/^\/+/, '');
-    showImage('{{ MEDIA_URL|default:"/media/" }}' + mediaPath);
-  }
+  (function initPreview() {
+    // Prefer saved carousel slides when continuing a draft/edit
+    if (existingPreviewUrls.length && existingPreviewUrls.length >= carouselUrls.length) {
+      setCarouselUrls(existingPreviewUrls);
+      return;
+    }
+    if (carouselUrls.length) return;
+    if (generatedPath && generatedPath.value && previewImage && (previewImage.hidden || !previewImage.src)) {
+      var mediaPath = generatedPath.value.replace(/^\/+/, '');
+      showImage('{{ MEDIA_URL|default:"/media/" }}' + mediaPath);
+    } else if (previewImage && previewImage.getAttribute('src')) {
+      setCarouselUrls([previewImage.getAttribute('src')]);
+    }
+  })();
   updateText();
   updateScheduleUI();
 
@@ -726,6 +1052,31 @@
     }
     input.addEventListener('change', sync);
     sync();
+  });
+
+  var libraryIds = document.getElementById('id_library_asset_ids');
+  var libraryStatus = document.getElementById('library-pick-status');
+  var selectedLibrary = [];
+  document.querySelectorAll('.library-pick').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var id = String(btn.getAttribute('data-id') || '');
+      if (!id) return;
+      var idx = selectedLibrary.indexOf(id);
+      if (idx >= 0) {
+        selectedLibrary.splice(idx, 1);
+        btn.classList.remove('is-selected');
+      } else {
+        selectedLibrary.push(id);
+        btn.classList.add('is-selected');
+      }
+      if (libraryStatus) {
+        if (!selectedLibrary.length) libraryStatus.textContent = '';
+        else if (selectedLibrary.length === 1) libraryStatus.textContent = 'Selected 1 image from library.';
+        else libraryStatus.textContent = 'Selected ' + selectedLibrary.length + ' images for carousel.';
+      }
+      if (libraryIds) libraryIds.value = selectedLibrary.join(',');
+      rebuildPreviewFromSelections();
+    });
   });
 })();
 </script>

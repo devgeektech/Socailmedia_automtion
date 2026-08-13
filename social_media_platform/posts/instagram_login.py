@@ -322,3 +322,136 @@ def instagram_publish_image_url(image_path: Path, image_url: str) -> str:
         except Exception:
             logger.exception('Could not convert image to JPEG for Instagram; using original')
     return public_image_url_for_instagram(publish_rel)
+
+
+def public_video_url_for_instagram(video_url: str) -> str:
+    url = absolute_media_url(video_url)
+    if (
+        url.startswith('http://localhost')
+        or url.startswith('http://127.0.0.1')
+        or not url.startswith('https://')
+    ):
+        raise MetaAPIError(
+            'Instagram needs a public HTTPS video URL. '
+            'Set PUBLIC_BASE_URL to a public https tunnel/domain Meta can reach.'
+        )
+    return url
+
+
+def publish_instagram_login_carousel(
+    *,
+    ig_user_id: str,
+    access_token: str,
+    image_urls: list[str],
+    caption: str,
+) -> str:
+    """Publish an Instagram carousel (2–10 images)."""
+    if len(image_urls) < 2:
+        raise MetaAPIError('Instagram carousel needs at least 2 images.')
+    if len(image_urls) > 10:
+        image_urls = image_urls[:10]
+
+    child_ids: list[str] = []
+    create_url = f'{ig_graph_base()}/{ig_user_id}/media'
+    with httpx.Client(timeout=60.0) as client:
+        for image_url in image_urls:
+            resp = client.post(
+                create_url,
+                data={
+                    'image_url': image_url,
+                    'is_carousel_item': 'true',
+                    'access_token': access_token,
+                },
+            )
+            created = resp.json()
+            _raise_for_graph(created, fallback='Instagram carousel item create failed')
+            cid = created.get('id')
+            if not cid:
+                raise MetaAPIError('Instagram did not return a carousel item id.')
+            child_ids.append(str(cid))
+
+    children = ','.join(child_ids)
+    with httpx.Client(timeout=60.0) as client:
+        resp = client.post(
+            create_url,
+            data={
+                'media_type': 'CAROUSEL',
+                'children': children,
+                'caption': caption,
+                'access_token': access_token,
+            },
+        )
+        parent = resp.json()
+    _raise_for_graph(parent, fallback='Instagram carousel create failed')
+    creation_id = parent.get('id')
+    if not creation_id:
+        raise MetaAPIError('Instagram did not return a carousel creation id.')
+
+    _wait_for_ig_login_container(str(creation_id), access_token, attempts=24)
+
+    published = _publish_container(
+        ig_user_id=ig_user_id,
+        access_token=access_token,
+        creation_id=str(creation_id),
+    )
+    err = published.get('error') if isinstance(published, dict) else None
+    if err and err.get('code') == 9007:
+        raise InstagramStillProcessing('instagram_still_processing')
+    _raise_for_graph(published, fallback='Instagram carousel publish failed')
+    media_id = published.get('id')
+    if not media_id:
+        raise MetaAPIError('Instagram carousel publish succeeded but no media id was returned.')
+    return str(media_id)
+
+
+def publish_instagram_login_video(
+    *,
+    ig_user_id: str,
+    access_token: str,
+    video_url: str,
+    caption: str,
+) -> str:
+    """Publish an Instagram feed video (Reels-compatible container)."""
+    create_url = f'{ig_graph_base()}/{ig_user_id}/media'
+    with httpx.Client(timeout=60.0) as client:
+        resp = client.post(
+            create_url,
+            data={
+                'media_type': 'REELS',
+                'video_url': video_url,
+                'caption': caption,
+                'share_to_feed': 'true',
+                'access_token': access_token,
+            },
+        )
+        created = resp.json()
+    _raise_for_graph(created, fallback='Instagram video create failed')
+    creation_id = created.get('id')
+    if not creation_id:
+        raise MetaAPIError('Instagram did not return a video creation id.')
+
+    _wait_for_ig_login_container(str(creation_id), access_token, attempts=40)
+
+    published = {}
+    for attempt in range(30):
+        published = _publish_container(
+            ig_user_id=ig_user_id,
+            access_token=access_token,
+            creation_id=str(creation_id),
+        )
+        err = published.get('error') if isinstance(published, dict) else None
+        if err and err.get('code') == 9007:
+            logger.info('Instagram video still processing (9007) attempt %s', attempt + 1)
+            time.sleep(5)
+            continue
+        break
+
+    err = published.get('error') if isinstance(published, dict) else None
+    if err and err.get('code') == 9007:
+        raise InstagramStillProcessing('instagram_still_processing')
+
+    _raise_for_graph(published, fallback='Instagram video publish failed')
+    media_id = published.get('id')
+    if not media_id:
+        raise MetaAPIError('Instagram video publish succeeded but no media id was returned.')
+    return str(media_id)

@@ -35,8 +35,8 @@ def friendly_user_error(exc: Exception) -> str:
         return 'Something went wrong. Please try again.'
     if '9007' in lower or 'media id is not available' in lower or 'not ready' in lower:
         return 'Your post is being published. It should appear shortly.'
-    if 'public_base_url' in lower or ('https' in lower and 'image' in lower):
-        return 'We could not publish this image right now. Please try again in a moment.'
+    if 'public_base_url' in lower or ('https' in lower and ('image' in lower or 'video' in lower)):
+        return 'We could not reach this media publicly. Check PUBLIC_BASE_URL and try again.'
     if 'not configured' in lower or 'app id' in lower or 'app secret' in lower:
         return 'This connection is not available right now. Please try again later.'
     if 'oauth' in lower or 'authorization' in lower or 'access token' in lower:
@@ -355,6 +355,76 @@ def publish_facebook_photo(*, page_id: str, page_token: str, image_path: Path, c
     return str(post_id)
 
 
+def publish_facebook_carousel(
+    *,
+    page_id: str,
+    page_token: str,
+    image_paths: list[Path],
+    caption: str,
+) -> str:
+    """Upload multiple unpublished photos, then publish as one multi-photo feed post."""
+    if len(image_paths) < 2:
+        raise MetaAPIError('Facebook multi-photo post needs at least 2 images.')
+
+    media_fbids: list[str] = []
+    url = f'{graph_base()}/{page_id}/photos'
+    with httpx.Client(timeout=120.0) as client:
+        for image_path in image_paths[:10]:
+            if not image_path.is_file():
+                raise MetaAPIError(f'Image file not found: {image_path.name}')
+            with image_path.open('rb') as fh:
+                files = {'source': (image_path.name, fh, 'image/jpeg')}
+                data = {
+                    'published': 'false',
+                    'access_token': page_token,
+                }
+                resp = client.post(url, data=data, files=files)
+                result = resp.json()
+            _raise_for_graph(result, fallback='Facebook carousel photo upload failed')
+            mid = result.get('id')
+            if not mid:
+                raise MetaAPIError('Facebook did not return a photo id for carousel item.')
+            media_fbids.append(str(mid))
+
+    feed_url = f'{graph_base()}/{page_id}/feed'
+    attached = {f'attached_media[{i}]': f'{{"media_fbid":"{mid}"}}' for i, mid in enumerate(media_fbids)}
+    data = {
+        'message': caption,
+        'access_token': page_token,
+        **attached,
+    }
+    with httpx.Client(timeout=60.0) as client:
+        resp = client.post(feed_url, data=data)
+        published = resp.json()
+    _raise_for_graph(published, fallback='Facebook multi-photo publish failed')
+    post_id = published.get('id')
+    if not post_id:
+        raise MetaAPIError('Facebook multi-photo publish succeeded but no post id was returned.')
+    return str(post_id)
+
+
+def publish_facebook_video(*, page_id: str, page_token: str, video_path: Path, caption: str) -> str:
+    """Upload a video to a Facebook Page. Returns the video id."""
+    if not video_path.is_file():
+        raise MetaAPIError('Video file not found for Facebook publish.')
+    url = f'{graph_base()}/{page_id}/videos'
+    with video_path.open('rb') as fh:
+        files = {'source': (video_path.name, fh, 'video/mp4')}
+        data = {
+            'description': caption,
+            'access_token': page_token,
+            'published': 'true',
+        }
+        with httpx.Client(timeout=300.0) as client:
+            resp = client.post(url, data=data, files=files)
+            result = resp.json()
+    _raise_for_graph(result, fallback='Facebook video publish failed')
+    video_id = result.get('id')
+    if not video_id:
+        raise MetaAPIError('Facebook video publish succeeded but no id was returned.')
+    return str(video_id)
+
+
 def _wait_for_ig_container(creation_id: str, page_token: str, *, attempts: int = 12) -> None:
     url = f'{graph_base()}/{creation_id}'
     with httpx.Client(timeout=30.0) as client:
@@ -417,11 +487,13 @@ def publish_instagram_photo(
 def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
     """
     Publish a post to Facebook and/or Instagram via Graph API.
+    Supports single image, carousel (multi-image), and video.
     platforms: optional subset {'facebook', 'instagram'}; defaults to post flags.
-    Credentials: that user's connected Facebook Page / Instagram from profile.
     Returns {'facebook': id|None, 'instagram': id|None}.
     """
     from django.utils import timezone
+
+    from .models import Post
 
     want_fb = post.publish_to_facebook if platforms is None else 'facebook' in platforms
     want_ig = post.publish_to_instagram if platforms is None else 'instagram' in platforms
@@ -429,11 +501,22 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
     if not want_fb and not want_ig:
         return {'facebook': None, 'instagram': None}
 
-    if not post.image:
+    is_video = post.media_type == Post.MEDIA_VIDEO or bool(post.video)
+    carousel_paths = post.carousel_image_paths() if not is_video else []
+    is_carousel = (not is_video) and (
+        post.media_type == Post.MEDIA_CAROUSEL or len(carousel_paths) >= 2
+    )
+
+    if is_video:
+        if not post.video:
+            raise MetaAPIError('A video file is required to publish video content.')
+    elif is_carousel:
+        if len(carousel_paths) < 2:
+            raise MetaAPIError('A carousel needs at least 2 images.')
+    elif not post.image:
         raise MetaAPIError('An image is required to publish to Facebook or Instagram.')
 
     caption = post_caption_text(post)
-    image_path = Path(post.image.path)
     errors: list[str] = []
     result = {'facebook': None, 'instagram': None}
     update_fields: list[str] = []
@@ -441,12 +524,27 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
     if want_fb:
         try:
             creds = resolve_publish_credentials(post.user)
-            fb_id = publish_facebook_photo(
-                page_id=creds['page_id'],
-                page_token=creds['page_token'],
-                image_path=image_path,
-                caption=caption,
-            )
+            if is_video:
+                fb_id = publish_facebook_video(
+                    page_id=creds['page_id'],
+                    page_token=creds['page_token'],
+                    video_path=Path(post.video.path),
+                    caption=caption,
+                )
+            elif is_carousel:
+                fb_id = publish_facebook_carousel(
+                    page_id=creds['page_id'],
+                    page_token=creds['page_token'],
+                    image_paths=carousel_paths,
+                    caption=caption,
+                )
+            else:
+                fb_id = publish_facebook_photo(
+                    page_id=creds['page_id'],
+                    page_token=creds['page_token'],
+                    image_path=Path(post.image.path),
+                    caption=caption,
+                )
             result['facebook'] = fb_id
             post.facebook_post_id = fb_id
             post.facebook_published_at = timezone.now()
@@ -470,20 +568,56 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
 
     if want_ig:
         from .instagram_login import (
+            InstagramStillProcessing,
             instagram_publish_image_url,
+            is_instagram_not_ready,
+            public_video_url_for_instagram,
+            publish_instagram_login_carousel,
             publish_instagram_login_photo,
+            publish_instagram_login_video,
             resolve_instagram_login_credentials,
         )
 
         try:
             ig_creds = resolve_instagram_login_credentials(post.user)
-            image_url = instagram_publish_image_url(image_path, post.image.url)
-            ig_id = publish_instagram_login_photo(
-                ig_user_id=ig_creds['ig_user_id'],
-                access_token=ig_creds['access_token'],
-                image_url=image_url,
-                caption=caption,
-            )
+            if is_video:
+                video_url = public_video_url_for_instagram(post.video.url)
+                ig_id = publish_instagram_login_video(
+                    ig_user_id=ig_creds['ig_user_id'],
+                    access_token=ig_creds['access_token'],
+                    video_url=video_url,
+                    caption=caption,
+                )
+            elif is_carousel:
+                urls = []
+                for item in post.ordered_media():
+                    path = item.resolve_image_path()
+                    url = item.resolve_image_url()
+                    if path and url:
+                        urls.append(instagram_publish_image_url(path, url))
+                if len(urls) < 2 and post.image:
+                    # Fallback: cover + media items missing URLs
+                    urls = [instagram_publish_image_url(Path(post.image.path), post.image.url)]
+                if len(urls) < 2:
+                    for p in carousel_paths:
+                        # Build media URL from path under MEDIA_ROOT
+                        rel = str(Path(p).relative_to(Path(settings.MEDIA_ROOT))).replace('\\', '/')
+                        media_url = f'{settings.MEDIA_URL.rstrip("/")}/{rel}'
+                        urls.append(instagram_publish_image_url(p, media_url))
+                ig_id = publish_instagram_login_carousel(
+                    ig_user_id=ig_creds['ig_user_id'],
+                    access_token=ig_creds['access_token'],
+                    image_urls=urls,
+                    caption=caption,
+                )
+            else:
+                image_url = instagram_publish_image_url(Path(post.image.path), post.image.url)
+                ig_id = publish_instagram_login_photo(
+                    ig_user_id=ig_creds['ig_user_id'],
+                    access_token=ig_creds['access_token'],
+                    image_url=image_url,
+                    caption=caption,
+                )
             result['instagram'] = ig_id
             post.instagram_media_id = ig_id
             post.instagram_published_at = timezone.now()
@@ -500,8 +634,6 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
                 ig_creds.get('source'),
             )
         except MetaAPIError as exc:
-            from .instagram_login import InstagramStillProcessing, is_instagram_not_ready
-
             if isinstance(exc, InstagramStillProcessing) or is_instagram_not_ready(exc):
                 logger.warning(
                     'Instagram still processing post id=%s; not showing 9007 to the user',

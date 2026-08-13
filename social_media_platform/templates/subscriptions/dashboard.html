@@ -13,6 +13,7 @@
     </div>
     <div class="dashboard-actions">
       <a href="{% url 'posts:create' %}" class="btn-primary">Add Post</a>
+      <a href="{% url 'posts:media_library' %}" class="btn-secondary">Media Library</a>
       <a href="{% url 'subscriptions:plans' %}" class="btn-secondary">Change Plan</a>
       <form method="post" action="{% url 'accounts:logout' %}" style="display:inline;">
         {% csrf_token %}
@@ -67,6 +68,45 @@
     </div>
   </div>
 
+  <form class="glass-card post-filters" method="get" action="{% url 'subscriptions:dashboard' %}">
+    <div class="post-filters-grid">
+      <label class="form-label">
+        Search
+        <input type="search" name="q" value="{{ filters.q }}" class="glass-input" placeholder="Caption, description…">
+      </label>
+      <label class="form-label">
+        Status
+        <select name="status" class="glass-input">
+          <option value="">All</option>
+          <option value="published" {% if filters.status == 'published' %}selected{% endif %}>Published</option>
+          <option value="draft" {% if filters.status == 'draft' %}selected{% endif %}>Draft</option>
+          <option value="scheduled" {% if filters.status == 'scheduled' %}selected{% endif %}>Scheduled</option>
+          <option value="failed" {% if filters.status == 'failed' %}selected{% endif %}>Failed</option>
+        </select>
+      </label>
+      <label class="form-label">
+        Platform
+        <select name="platform" class="glass-input">
+          <option value="">All</option>
+          <option value="facebook" {% if filters.platform == 'facebook' %}selected{% endif %}>Facebook</option>
+          <option value="instagram" {% if filters.platform == 'instagram' %}selected{% endif %}>Instagram</option>
+        </select>
+      </label>
+      <label class="form-label">
+        From
+        <input type="date" name="date_from" value="{{ filters.date_from }}" class="glass-input">
+      </label>
+      <label class="form-label">
+        To
+        <input type="date" name="date_to" value="{{ filters.date_to }}" class="glass-input">
+      </label>
+      <div class="post-filters-actions">
+        <button type="submit" class="btn-primary btn-sm">Filter</button>
+        <a href="{% url 'subscriptions:dashboard' %}" class="btn-secondary btn-sm">Reset</a>
+      </div>
+    </div>
+  </form>
+
   <div class="stats-grid post-tabs" role="tablist" aria-label="Filter posts">
     <button type="button" class="glass-card stat-card post-tab is-active" role="tab" aria-selected="true" data-tab="all">
       <div class="stat-value">{{ stats.total }}</div>
@@ -101,12 +141,34 @@
       {% for post in posts %}
       <article class="glass-card social-post-card" data-status="{{ post.status }}">
         <div class="social-post-image">
-            {% if post.image %}
+            {% if post.media_type == 'carousel' and post.media_items.exists %}
+                {% with slides=post.ordered_media %}
+                <div class="dashboard-carousel-preview" data-carousel>
+                  {% for item in slides %}
+                    {% if item.resolve_image_url %}
+                    <img src="{{ item.resolve_image_url }}" alt="{{ post.caption }}" {% if not forloop.first %}hidden{% endif %} data-slide>
+                    {% endif %}
+                  {% endfor %}
+                  {% if slides|length > 1 %}
+                  <button type="button" class="dashboard-carousel-nav prev" data-carousel-prev aria-label="Previous">‹</button>
+                  <button type="button" class="dashboard-carousel-nav next" data-carousel-next aria-label="Next">›</button>
+                  <span class="dashboard-carousel-count">{{ slides|length }}</span>
+                  {% endif %}
+                </div>
+                {% endwith %}
+            {% elif post.image %}
                 <img src="{{ post.image.url }}" alt="{{ post.caption }}">
+            {% elif post.video %}
+                <div class="no-image"><span>▶</span></div>
             {% else %}
                 <div class="no-image">
                     <span>🖼</span>
                 </div>
+            {% endif %}
+            {% if post.media_type == 'carousel' %}
+            <span class="media-type-badge">Carousel</span>
+            {% elif post.media_type == 'video' %}
+            <span class="media-type-badge">Video</span>
             {% endif %}
         </div>
         <div class="social-post-content">
@@ -178,6 +240,16 @@
                     </svg>
                 </a>
                 {% endif %}
+
+                <form method="post" action="{% url 'posts:duplicate' post.pk %}" style="display:inline;">
+                  {% csrf_token %}
+                  <button type="submit" class="icon-btn" title="Duplicate post" aria-label="Duplicate post">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                  </button>
+                </form>
 
                 <form method="post"
                       action="{% url 'posts:delete' post.pk %}"
@@ -302,6 +374,31 @@
     if (start && titles[start]) initial = start;
   } catch (err) { /* ignore */ }
   if (cards.length) activateTab(initial);
+
+  document.querySelectorAll('[data-carousel]').forEach(function (wrap) {
+    var slides = Array.prototype.slice.call(wrap.querySelectorAll('[data-slide]'));
+    if (slides.length < 2) return;
+    var index = 0;
+    function show(i) {
+      index = (i + slides.length) % slides.length;
+      slides.forEach(function (img, n) {
+        if (n === index) img.removeAttribute('hidden');
+        else img.setAttribute('hidden', 'hidden');
+      });
+    }
+    var prev = wrap.querySelector('[data-carousel-prev]');
+    var next = wrap.querySelector('[data-carousel-next]');
+    if (prev) prev.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      show(index - 1);
+    });
+    if (next) next.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      show(index + 1);
+    });
+  });
 })();
 </script>
 {% endblock %}

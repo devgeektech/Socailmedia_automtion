@@ -39,7 +39,27 @@ def home_view(request):
         {
             'icon': '▣',
             'title': 'AI image options',
-            'desc': 'Describe what you want, pick from three options, and lock in the look that fits.',
+            'desc': 'Describe what you want, select one or more of three options, and build a single post or carousel.',
+        },
+        {
+            'icon': '◫',
+            'title': 'Carousel posts',
+            'desc': 'Mix gallery uploads, library picks, and AI images — preview as a carousel before you publish.',
+        },
+        {
+            'icon': '▦',
+            'title': 'Media library',
+            'desc': 'Store and reuse previously uploaded or AI-generated images across posts.',
+        },
+        {
+            'icon': '⧉',
+            'title': 'Post duplication',
+            'desc': 'Duplicate an existing post, then change the caption, date, or media.',
+        },
+        {
+            'icon': '⌕',
+            'title': 'Search & filters',
+            'desc': 'Find posts by caption, status, platform, and date — fast.',
         },
         {
             'icon': '◔',

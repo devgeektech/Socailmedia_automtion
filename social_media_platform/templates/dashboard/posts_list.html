@@ -19,7 +19,7 @@
   </div>
 </div>
 
-<form method="get" class="admin-filters glass-card">
+{% comment %} <form method="get" class="admin-filters glass-card">
   {% if filter_user %}<input type="hidden" name="user" value="{{ filter_user.id }}">{% endif %}
   <input type="search" name="q" value="{{ q }}" class="glass-input" placeholder="Search content, caption, user…">
   <select name="status" class="glass-input">
@@ -29,7 +29,7 @@
     {% endfor %}
   </select>
   <button type="submit" class="btn-secondary">Filter</button>
-</form>
+</form> {% endcomment %}
 
 <section class="glass-card admin-panel">
   <div class="admin-table-wrap">

@@ -74,6 +74,65 @@ def _attach_ai_image_optional(post, form):
         pass
 
 
+def _apply_media_from_form(request, post, form):
+    """Attach gallery uploads, library picks, and/or multi AI images as single/carousel."""
+    from .media_utils import (
+        attach_carousel_from_assets,
+        attach_single_image_asset,
+        kind_from_name,
+        merge_image_assets,
+        parse_asset_ids,
+        save_ai_temp_to_library,
+        save_upload_to_library,
+    )
+    from .models import MediaAsset
+
+    prompt = (form.cleaned_data.get('image_prompt') or '').strip()
+    carousel_files = request.FILES.getlist('carousel_files')
+    library_ids = (form.cleaned_data.get('library_asset_ids') or '').strip()
+    library_assets = [
+        a for a in parse_asset_ids(library_ids, request.user)
+        if a.kind == MediaAsset.KIND_IMAGE
+    ]
+
+    uploaded_assets = []
+    for f in carousel_files[:10]:
+        if kind_from_name(f.name) != MediaAsset.KIND_IMAGE:
+            continue
+        uploaded_assets.append(save_upload_to_library(request.user, f))
+
+    raw_paths = (form.cleaned_data.get('generated_image_paths') or '').strip()
+    if not raw_paths:
+        single = (form.cleaned_data.get('generated_image_path') or '').strip()
+        raw_paths = single
+    path_parts = [p.strip() for p in raw_paths.split(',') if p.strip()]
+
+    ai_assets = []
+    for rel in path_parts:
+        full = _safe_temp_path(rel, post.user_id)
+        if not full:
+            continue
+        try:
+            ai_assets.append(save_ai_temp_to_library(request.user, full, prompt=prompt))
+            full.unlink(missing_ok=True)
+        except Exception:
+            logger.exception('Could not save AI temp into library')
+
+    combined = merge_image_assets(uploaded_assets, library_assets, ai_assets)
+    if combined:
+        if len(combined) == 1:
+            attach_single_image_asset(post, combined[0])
+        else:
+            attach_carousel_from_assets(post, combined)
+        return
+
+    if not post.image and not post.media_items.exists():
+        try:
+            _attach_ai_image(post, form, force_regenerate=False)
+        except ImageGenerationError:
+            raise
+
+
 def _save_draft_from_form(request, form, *, post=None):
     """Create or update a draft post from the form."""
     if post is None:
@@ -81,31 +140,13 @@ def _save_draft_from_form(request, form, *, post=None):
         post.user = request.user
     else:
         post = form.save(commit=False)
-    _attach_ai_image_optional(post, form)
     post.save()
+    try:
+        _apply_media_from_form(request, post, form)
+    except ImageGenerationError:
+        pass
     form.save_draft(post)
     return post
-
-
-def _post_form_context(request, form, *, is_edit, post=None, page_title='Create Post'):
-    profile = getattr(request.user, 'profile', None)
-    from .meta import facebook_publish_ready, instagram_publish_ready
-
-    ctx = {
-        'form': form,
-        'subscription': request.subscription,
-        'is_edit': is_edit,
-        'page_title': page_title,
-        'meta_connected': bool(profile and profile.meta_connected),
-        'facebook_ready': facebook_publish_ready(request.user),
-        'instagram_ready': instagram_publish_ready(request.user),
-    }
-    if post is not None:
-        ctx['post'] = post
-        ctx['is_draft'] = post.status == Post.STATUS_DRAFT
-    else:
-        ctx['is_draft'] = False
-    return ctx
 
 
 def _handle_post_submit(request, form, *, post=None):
@@ -116,13 +157,17 @@ def _handle_post_submit(request, form, *, post=None):
     else:
         post = form.save(commit=False)
 
+    post.save()
     try:
-        _attach_ai_image(post, form, force_regenerate=post.pk is None)
+        _apply_media_from_form(request, post, form)
+        if not post.image and not post.media_items.exists():
+            _attach_ai_image(post, form, force_regenerate=post.pk is None)
+            post.save()
     except ImageGenerationError as exc:
         form.add_error('image_prompt', str(exc))
         return None
 
-    post.save()
+    post.refresh_from_db()
     try:
         form.apply_publish_action(post)
     except Exception as exc:
@@ -180,6 +225,41 @@ def _attach_ai_image(post, form, *, force_regenerate=False):
         if post.image:
             post.image.delete(save=False)
         post.image.save(content.name, content, save=False)
+
+
+def _post_form_context(request, form, *, is_edit, post=None, page_title='Create Post'):
+    profile = getattr(request.user, 'profile', None)
+    from .meta import facebook_publish_ready, instagram_publish_ready
+    from .models import MediaAsset
+
+    ctx = {
+        'form': form,
+        'subscription': request.subscription,
+        'is_edit': is_edit,
+        'page_title': page_title,
+        'meta_connected': bool(profile and profile.meta_connected),
+        'facebook_ready': facebook_publish_ready(request.user),
+        'instagram_ready': instagram_publish_ready(request.user),
+        'library_assets': MediaAsset.objects.filter(
+            user=request.user,
+            kind=MediaAsset.KIND_IMAGE,
+        )[:24],
+    }
+    if post is not None:
+        ctx['post'] = post
+        ctx['is_draft'] = post.status == Post.STATUS_DRAFT
+        preview_urls = []
+        for item in post.ordered_media():
+            url = item.resolve_image_url()
+            if url:
+                preview_urls.append(url)
+        if not preview_urls and post.image:
+            preview_urls.append(post.image.url)
+        ctx['existing_preview_urls'] = preview_urls
+    else:
+        ctx['is_draft'] = False
+        ctx['existing_preview_urls'] = []
+    return ctx
 
 
 @subscription_required
@@ -264,7 +344,7 @@ def generate_image_view(request):
 def post_create_view(request):
     if request.method == 'POST':
         save_draft = (request.POST.get('save_draft') or '').strip() == '1'
-        form = PostForm(request.POST, user=request.user, draft_mode=save_draft)
+        form = PostForm(request.POST, request.FILES, user=request.user, draft_mode=save_draft)
         if form.is_valid():
             if save_draft:
                 _save_draft_from_form(request, form)
@@ -297,6 +377,7 @@ def post_edit_view(request, pk):
         save_draft = (request.POST.get('save_draft') or '').strip() == '1'
         form = PostForm(
             request.POST,
+            request.FILES,
             instance=post,
             user=request.user,
             draft_mode=save_draft,
@@ -318,6 +399,69 @@ def post_edit_view(request, pk):
         _post_form_context(request, form, is_edit=True, post=post, page_title=page_title),
     )
 
+
+@subscription_required
+@require_POST
+def post_duplicate_view(request, pk):
+    post = _user_post_or_404(request, pk)
+    clone = post.duplicate_for(request.user)
+    messages.success(request, 'Post duplicated as a draft. Update the caption or schedule, then publish.')
+    return redirect('posts:edit', pk=clone.pk)
+
+
+@subscription_required
+def media_library_view(request):
+    from .models import MediaAsset
+
+    assets = MediaAsset.objects.filter(user=request.user, kind=MediaAsset.KIND_IMAGE)
+
+    return render(request, 'posts/media_library.html', {
+        'subscription': request.subscription,
+        'assets': assets[:120],
+    })
+
+
+@subscription_required
+@require_POST
+def media_upload_view(request):
+    from .media_utils import kind_from_name, save_upload_to_library
+    from .models import MediaAsset
+
+    files = request.FILES.getlist('files') or ([request.FILES['file']] if request.FILES.get('file') else [])
+    if not files:
+        messages.error(request, 'Choose at least one image to upload.')
+        return redirect('posts:media_library')
+
+    saved = 0
+    skipped = 0
+    for f in files[:20]:
+        if kind_from_name(f.name) != MediaAsset.KIND_IMAGE:
+            skipped += 1
+            continue
+        save_upload_to_library(request.user, f)
+        saved += 1
+    if saved:
+        messages.success(request, f'Added {saved} image{"s" if saved != 1 else ""} to your media library.')
+    if skipped:
+        messages.warning(request, 'Video uploads are disabled for now — only images were saved.')
+    if not saved and not skipped:
+        messages.error(request, 'No images were uploaded.')
+    return redirect('posts:media_library')
+
+
+@subscription_required
+@require_POST
+def media_delete_view(request, pk):
+    from .models import MediaAsset
+
+    asset = get_object_or_404(MediaAsset, pk=pk, user=request.user)
+    if asset.file:
+        asset.file.delete(save=False)
+    asset.delete()
+    messages.success(request, 'Removed from media library.')
+    return redirect('posts:media_library')
+
+
 @subscription_required
 def post_delete_view(request, pk):
     post = _user_post_or_404(request, pk)
@@ -327,6 +471,8 @@ def post_delete_view(request, pk):
     if request.method == 'POST':
         if post.image:
             post.image.delete(save=False)
+        if post.video:
+            post.video.delete(save=False)
         post.delete()
         messages.success(
             request,
@@ -349,9 +495,17 @@ def post_delete_view(request, pk):
 @subscription_required
 def post_preview_view(request, pk):
     post = _user_post_or_404(request, pk)
+    preview_urls = []
+    for item in post.ordered_media():
+        url = item.resolve_image_url()
+        if url:
+            preview_urls.append(url)
+    if not preview_urls and post.image:
+        preview_urls.append(post.image.url)
     return render(request, 'posts/post_preview.html', {
         'post': post,
         'subscription': request.subscription,
+        'preview_urls': preview_urls,
     })
 
 
@@ -373,8 +527,8 @@ def publish_platform_view(request, pk):
         messages.error(request, 'Choose Facebook or Instagram.')
         return redirect('subscriptions:dashboard')
 
-    if not post.image:
-        messages.error(request, 'This post needs an image before it can be published socially.')
+    if not post.image and post.media_items.count() < 1:
+        messages.error(request, 'This post needs an image or carousel before it can be published.')
         return redirect('subscriptions:dashboard')
 
     if platform == 'facebook' and not meta_configured():
