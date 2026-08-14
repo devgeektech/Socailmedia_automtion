@@ -72,18 +72,6 @@
                 </svg>
             </a>
 
-            {% if post.status == 'publishing' %}
-            <form method="post"
-                  action="{% url 'posts:cancel_publish' post.pk %}"
-                  style="display:inline;"
-                  onsubmit="return confirm('Cancel this publish request?');">
-              {% csrf_token %}
-              <button type="submit" class="btn-secondary btn-sm publish-cancel-btn"{% if post.cancel_requested %} disabled{% endif %}>
-                {% if post.cancel_requested %}Cancelling…{% else %}Cancel publishing{% endif %}
-              </button>
-            </form>
-            {% endif %}
-
             {% if post.status == 'draft' %}
             <a href="{% url 'posts:edit' post.pk %}" class="icon-btn" title="Continue draft" aria-label="Continue draft">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

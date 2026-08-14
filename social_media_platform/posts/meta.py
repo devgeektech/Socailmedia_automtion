@@ -716,9 +716,7 @@ def publish_post_to_meta(
 
     fb_id, fb_exc, ig_id, ig_exc = _run_publish_tasks(fb_task, ig_task)
 
-    from .publisher import PublishCancelled
-
-    if fb_exc is not None and not isinstance(fb_exc, PublishCancelled):
+    if fb_exc is not None:
         if not isinstance(fb_exc, MetaAPIError):
             logger.exception(
                 'Unexpected Facebook publish error for post id=%s',
@@ -738,7 +736,7 @@ def publish_post_to_meta(
         ])
         logger.info('Published post id=%s to Facebook', post.pk)
 
-    if ig_exc is not None and not isinstance(ig_exc, PublishCancelled):
+    if ig_exc is not None:
         if isinstance(ig_exc, InstagramStillProcessing) or (
             isinstance(ig_exc, MetaAPIError) and is_instagram_not_ready(ig_exc)
         ):

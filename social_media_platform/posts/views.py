@@ -74,43 +74,26 @@ def _attach_ai_image_optional(post, form):
         pass
 
 
-def _apply_media_from_form(request, post, form):
-    """Attach gallery uploads, library picks, and/or multi AI images as single/carousel/video."""
-    from .media_utils import (
-        attach_carousel_from_assets,
-        attach_single_image_asset,
-        attach_video_from_asset,
-        clear_post_media,
-        clear_post_video,
-        existing_image_assets_for_post,
-        first_video_asset,
-        kind_from_name,
-        merge_image_assets,
-        parse_asset_ids,
-        save_ai_temp_to_library,
-        save_upload_to_library,
-    )
+def _collect_media_from_form(request, form, *, user):
+    """
+    Persist new uploads/AI temps into the library and return a media job dict.
+    Does not attach anything to the post yet (fast path for publish-now).
+    """
+    from .media_utils import kind_from_name, parse_asset_ids, save_ai_temp_to_library, save_upload_to_library
     from .models import MediaAsset
 
     prompt = (form.cleaned_data.get('image_prompt') or '').strip()
     carousel_files = request.FILES.getlist('carousel_files')
     library_ids = (form.cleaned_data.get('library_asset_ids') or '').strip()
-    library_picked = parse_asset_ids(library_ids, request.user)
-    library_images = [a for a in library_picked if a.kind == MediaAsset.KIND_IMAGE]
-    library_videos = [a for a in library_picked if a.kind == MediaAsset.KIND_VIDEO]
     replace_existing = (request.POST.get('replace_existing_media') or '').strip() == '1'
 
-    uploaded_images = []
-    uploaded_videos = []
+    uploaded_ids = []
     for f in carousel_files[:10]:
         kind = kind_from_name(f.name)
         if kind not in {MediaAsset.KIND_IMAGE, MediaAsset.KIND_VIDEO}:
             continue
-        asset = save_upload_to_library(request.user, f)
-        if asset.kind == MediaAsset.KIND_VIDEO:
-            uploaded_videos.append(asset)
-        else:
-            uploaded_images.append(asset)
+        asset = save_upload_to_library(user, f)
+        uploaded_ids.append(asset.pk)
 
     raw_paths = (form.cleaned_data.get('generated_image_paths') or '').strip()
     if not raw_paths:
@@ -118,63 +101,48 @@ def _apply_media_from_form(request, post, form):
         raw_paths = single
     path_parts = [p.strip() for p in raw_paths.split(',') if p.strip()]
 
-    ai_assets = []
+    ai_ids = []
     for rel in path_parts:
-        full = _safe_temp_path(rel, post.user_id)
+        full = _safe_temp_path(rel, user.id)
         if not full:
             continue
         try:
-            ai_assets.append(save_ai_temp_to_library(request.user, full, prompt=prompt))
+            asset = save_ai_temp_to_library(user, full, prompt=prompt)
+            ai_ids.append(asset.pk)
             full.unlink(missing_ok=True)
         except Exception:
             logger.exception('Could not save AI temp into library')
 
-    # One video for FB/IG — prefer a fresh device upload, then a library-only pick
-    video_asset = first_video_asset(uploaded_videos, library_videos)
-    has_images = bool(uploaded_images or library_images or ai_assets)
-    if video_asset is not None and (uploaded_videos or not has_images):
-        attach_video_from_asset(post, video_asset)
-        return
+    library_picked = parse_asset_ids(library_ids, user)
+    return {
+        'uploaded_ids': uploaded_ids,
+        'library_ids': [a.pk for a in library_picked],
+        'ai_ids': ai_ids,
+        'replace_existing': replace_existing,
+        'prompt': prompt,
+    }
 
-    existing_assets = existing_image_assets_for_post(post, promote_cover=False)
-    existing_ids = {a.pk for a in existing_assets}
 
-    if replace_existing:
-        # Client sent the full remaining set via library / uploads / AI
-        combined = merge_image_assets(uploaded_images, library_images, ai_assets)
-    else:
-        new_library = [a for a in library_images if a.pk not in existing_ids]
-        if uploaded_images or new_library or ai_assets:
-            # Append new photos to the ones already on the draft/post
-            existing_assets = existing_image_assets_for_post(post, promote_cover=True)
-            combined = merge_image_assets(
-                existing_assets,
-                uploaded_images,
-                library_images,
-                ai_assets,
-            )
-        else:
-            combined = []
+def _attach_media_job(post, media_job: dict | None) -> None:
+    """Attach stashed library assets onto a post (used by background publish)."""
+    from .media_utils import attach_media_job
 
-    if combined:
-        if len(combined) == 1:
-            attach_single_image_asset(post, combined[0])
-        else:
-            attach_carousel_from_assets(post, combined)
-        return
+    attach_media_job(post, media_job)
 
-    if video_asset is not None:
-        attach_video_from_asset(post, video_asset)
-        return
 
-    if replace_existing:
-        clear_post_media(post)
-        clear_post_video(post)
-        if post.image:
-            post.image.delete(save=False)
-            post.image = None
-        post.media_type = Post.MEDIA_IMAGE
-        post.save(update_fields=['image', 'video', 'media_type', 'updated_at'])
+def _apply_media_from_form(request, post, form):
+    """Attach gallery uploads, library picks, and/or multi AI images as single/carousel/video."""
+    from .media_utils import attach_media_job
+
+    media_job = _collect_media_from_form(request, form, user=request.user)
+    had_new = bool(
+        media_job.get('uploaded_ids')
+        or media_job.get('library_ids')
+        or media_job.get('ai_ids')
+        or media_job.get('replace_existing')
+    )
+    if had_new:
+        attach_media_job(post, media_job)
         return
 
     if not post.image and not post.video and not post.media_items.exists():
@@ -202,6 +170,9 @@ def _save_draft_from_form(request, form, *, post=None):
 
 def _handle_post_submit(request, form, *, post=None):
     """Publish or schedule after validation. Returns redirect response or None."""
+    from .forms import PostForm
+    from .publisher import enqueue_publish
+
     if post is None:
         post = form.save(commit=False)
         post.user = request.user
@@ -209,6 +180,42 @@ def _handle_post_submit(request, form, *, post=None):
         post = form.save(commit=False)
 
     post.save()
+    action = form.cleaned_data.get('publish_action')
+
+    # Publish now: stash uploads, queue background attach+Meta publish, redirect ASAP.
+    if action == PostForm.PUBLISH_NOW:
+        try:
+            media_job = _collect_media_from_form(request, form, user=request.user)
+        except Exception as exc:
+            logger.exception('Could not save media before background publish')
+            form.add_error(None, f'Could not save media: {exc}')
+            return None
+
+        has_pending = bool(
+            media_job.get('uploaded_ids')
+            or media_job.get('library_ids')
+            or media_job.get('ai_ids')
+        )
+        has_existing = bool(post.image or post.video or post.media_items.exists())
+        if not has_pending and not has_existing:
+            try:
+                _attach_ai_image(post, form, force_regenerate=post.pk is None)
+                post.save()
+            except ImageGenerationError as exc:
+                form.add_error('image_prompt', str(exc))
+                return None
+            media_job = None
+
+        form.apply_publish_action(post)
+        use_job = has_pending or bool(media_job.get('replace_existing'))
+        enqueue_publish(post.pk, media_job=media_job if use_job else None)
+        messages.success(
+            request,
+            'Publishing started. You can follow its progress from the dashboard.',
+        )
+        return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
+
+    # Schedule: attach media now so the post is complete before it is queued later.
     try:
         _apply_media_from_form(request, post, form)
         if not post.image and not post.video and not post.media_items.exists():
@@ -219,75 +226,20 @@ def _handle_post_submit(request, form, *, post=None):
         return None
 
     post.refresh_from_db()
-    try:
-        form.apply_publish_action(post)
-    except Exception as exc:
-        from .meta import MetaAPIError
-        from .instagram_login import is_instagram_not_ready
+    form.apply_publish_action(post)
 
-        if isinstance(exc, MetaAPIError) and is_instagram_not_ready(exc):
-            post.refresh_from_db()
-            messages.success(request, 'Post published successfully.')
-            return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
-        if isinstance(exc, MetaAPIError):
-            from .meta import friendly_user_error
+    from django.utils import timezone as dj_tz
 
-            logger.warning('Publish failed: %s', exc)
-            messages.error(request, friendly_user_error(exc))
-            return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
-        raise
-
-    if post.status == Post.STATUS_PUBLISHING:
+    when = post.scheduled_at
+    if when:
+        local_when = dj_tz.localtime(when)
         messages.success(
             request,
-            'Publishing started. You can cancel it from the dashboard while it is still pending.',
+            f'Your post is scheduled for {local_when.strftime("%d %b %Y, %I:%M %p")}.',
         )
-    elif post.status == Post.STATUS_PUBLISHED:
-        messages.success(request, 'Post published successfully.')
     else:
-        from django.utils import timezone as dj_tz
-
-        when = post.scheduled_at
-        if when:
-            local_when = dj_tz.localtime(when)
-            messages.success(
-                request,
-                f'Your post is scheduled for {local_when.strftime("%d %b %Y, %I:%M %p")}.',
-            )
-        else:
-            messages.success(request, 'Your post is scheduled.')
+        messages.success(request, 'Your post is scheduled.')
     return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
-
-
-@subscription_required
-@require_POST
-def cancel_publish_view(request, pk):
-    """Request cancellation for a background publish owned by this user."""
-    post = _user_post_or_404(request, pk)
-    if post.status != Post.STATUS_PUBLISHING:
-        messages.info(request, 'This post is no longer waiting to publish.')
-        return redirect('subscriptions:dashboard')
-
-    if post.facebook_post_id or post.instagram_media_id:
-        messages.warning(
-            request,
-            'A social platform has already accepted this post, so it cannot be fully cancelled.',
-        )
-        return redirect('subscriptions:dashboard')
-
-    updated = Post.objects.filter(
-        pk=post.pk,
-        user=request.user,
-        status=Post.STATUS_PUBLISHING,
-    ).update(cancel_requested=True)
-    if updated:
-        messages.success(
-            request,
-            'Cancellation requested. It will return to Draft unless a platform already accepted it.',
-        )
-    else:
-        messages.info(request, 'This post is no longer waiting to publish.')
-    return redirect('subscriptions:dashboard')
 
 
 def _attach_ai_image(post, form, *, force_regenerate=False):

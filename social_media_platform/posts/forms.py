@@ -235,12 +235,7 @@ class PostForm(forms.ModelForm):
     def apply_publish_action(self, post):
         action = self.cleaned_data['publish_action']
         if action == self.PUBLISH_NOW:
-            from .publisher import enqueue_publish
-
             post.mark_publishing()
-            # Give the dashboard time to render a reliable cancel button before
-            # any request is sent to Meta.
-            enqueue_publish(post.pk, grace_seconds=10.0)
         else:
             post.mark_scheduled(self.cleaned_data['scheduled_at'])
         return post

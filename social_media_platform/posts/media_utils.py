@@ -205,3 +205,67 @@ def clear_post_video(post: Post) -> None:
     if post.video:
         post.video.delete(save=False)
         post.video = None
+
+
+def attach_media_job(post: Post, media_job: dict | None) -> None:
+    """Attach stashed library assets onto a post (used by background publish)."""
+    if not media_job:
+        return
+
+    uploaded_ids = [str(i) for i in (media_job.get('uploaded_ids') or [])]
+    library_ids = [str(i) for i in (media_job.get('library_ids') or [])]
+    ai_ids = [str(i) for i in (media_job.get('ai_ids') or [])]
+    replace_existing = bool(media_job.get('replace_existing'))
+
+    uploaded = parse_asset_ids(','.join(uploaded_ids), post.user)
+    library_picked = parse_asset_ids(','.join(library_ids), post.user)
+    ai_assets = parse_asset_ids(','.join(ai_ids), post.user)
+
+    uploaded_images = [a for a in uploaded if a.kind == MediaAsset.KIND_IMAGE]
+    uploaded_videos = [a for a in uploaded if a.kind == MediaAsset.KIND_VIDEO]
+    library_images = [a for a in library_picked if a.kind == MediaAsset.KIND_IMAGE]
+    library_videos = [a for a in library_picked if a.kind == MediaAsset.KIND_VIDEO]
+
+    video_asset = first_video_asset(uploaded_videos, library_videos)
+    has_images = bool(uploaded_images or library_images or ai_assets)
+    if video_asset is not None and (uploaded_videos or not has_images):
+        attach_video_from_asset(post, video_asset)
+        return
+
+    existing_assets = existing_image_assets_for_post(post, promote_cover=False)
+    existing_ids = {a.pk for a in existing_assets}
+
+    if replace_existing:
+        combined = merge_image_assets(uploaded_images, library_images, ai_assets)
+    else:
+        new_library = [a for a in library_images if a.pk not in existing_ids]
+        if uploaded_images or new_library or ai_assets:
+            existing_assets = existing_image_assets_for_post(post, promote_cover=True)
+            combined = merge_image_assets(
+                existing_assets,
+                uploaded_images,
+                library_images,
+                ai_assets,
+            )
+        else:
+            combined = []
+
+    if combined:
+        if len(combined) == 1:
+            attach_single_image_asset(post, combined[0])
+        else:
+            attach_carousel_from_assets(post, combined)
+        return
+
+    if video_asset is not None:
+        attach_video_from_asset(post, video_asset)
+        return
+
+    if replace_existing:
+        clear_post_media(post)
+        clear_post_video(post)
+        if post.image:
+            post.image.delete(save=False)
+            post.image = None
+        post.media_type = Post.MEDIA_IMAGE
+        post.save(update_fields=['image', 'video', 'media_type', 'updated_at'])

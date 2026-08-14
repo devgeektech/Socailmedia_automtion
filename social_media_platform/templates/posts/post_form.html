@@ -219,7 +219,7 @@
           </span>
           <span class="submit-btn-loading" id="submit-btn-loading" hidden>
             <span class="ai-spinner" aria-hidden="true"></span>
-            Publishing…
+            <span id="submit-btn-loading-text">Starting…</span>
           </span>
         </button>
         <button type="submit" class="btn-secondary" id="btn-save-draft" style="width:auto;" data-action="draft">
@@ -1275,6 +1275,11 @@
       }
       if (saveDraftField) saveDraftField.value = '';
       pendingAction = 'publish';
+      var loadingText = document.getElementById('submit-btn-loading-text');
+      var hasFiles = galleryInput && galleryInput.files && galleryInput.files.length > 0;
+      if (loadingText) {
+        loadingText.textContent = hasFiles ? 'Uploading…' : 'Starting…';
+      }
       if (saveDraftBtn) {
         saveDraftBtn.disabled = true;
         saveDraftBtn.classList.add('is-disabled');
