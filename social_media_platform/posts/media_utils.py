@@ -186,3 +186,18 @@ def merge_image_assets(*groups: list[MediaAsset]) -> list[MediaAsset]:
             seen.add(asset.pk)
             merged.append(asset)
     return merged[:10]
+
+
+def first_video_asset(*groups: list[MediaAsset]) -> MediaAsset | None:
+    """Return the first video asset across groups (publish allows one video)."""
+    for group in groups:
+        for asset in group:
+            if asset and asset.kind == MediaAsset.KIND_VIDEO and asset.file:
+                return asset
+    return None
+
+
+def clear_post_video(post: Post) -> None:
+    if post.video:
+        post.video.delete(save=False)
+        post.video = None

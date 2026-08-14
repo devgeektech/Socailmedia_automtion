@@ -24,33 +24,39 @@
         <strong>{{ user.get_full_name|default:user.email }}</strong>
         <small>
           <span class="status-pill status-{{ post.status }}">{{ post.get_status_display }}</span>
-          {% if preview_urls|length > 1 %}
-          <span class="chip" style="margin-left:0.35rem;">{{ preview_urls|length }} photos</span>
+          {% if preview_items|length > 1 %}
+          <span class="chip" style="margin-left:0.35rem;">{{ preview_items|length }} photos</span>
+          {% elif preview_items|length == 1 and preview_items.0.type == 'video' %}
+          <span class="chip" style="margin-left:0.35rem;">Video</span>
           {% endif %}
         </small>
       </div>
     </div>
 
-    <div class="social-preview-media{% if preview_urls %} has-image{% endif %}">
-      {% if preview_urls %}
+    <div class="social-preview-media{% if preview_items %} has-image{% endif %}">
+      {% if preview_items %}
       <div class="preview-slider" id="preview-slider">
-        <div class="preview-photos is-slider" id="preview-photos">
-          {% for url in preview_urls %}
-          <div class="preview-photo">
-            <img src="{{ url }}" alt="Photo {{ forloop.counter }}">
+        <div class="preview-photos{% if preview_items|length > 1 %} is-slider{% endif %}" id="preview-photos">
+          {% for item in preview_items %}
+          <div class="preview-photo{% if item.type == 'video' %} is-video{% endif %}">
+            {% if item.type == 'video' %}
+            <video src="{{ item.url }}" controls playsinline preload="metadata" aria-label="Post video"></video>
+            {% else %}
+            <img src="{{ item.url }}" alt="Photo {{ forloop.counter }}">
+            {% endif %}
           </div>
           {% endfor %}
         </div>
-        {% if preview_urls|length > 1 %}
+        {% if preview_items|length > 1 %}
         <div class="preview-slider-dots" id="preview-slider-dots">
-          {% for url in preview_urls %}
+          {% for item in preview_items %}
           <button type="button" class="preview-slider-dot{% if forloop.first %} is-active{% endif %}" data-index="{{ forloop.counter0 }}" aria-label="Photo {{ forloop.counter }}"></button>
           {% endfor %}
         </div>
         {% endif %}
       </div>
       {% else %}
-      <div class="preview-media-placeholder">No image yet</div>
+      <div class="preview-media-placeholder">No media yet</div>
       {% endif %}
     </div>
 
@@ -75,7 +81,7 @@
 {% endblock %}
 
 {% block extra_js %}
-{% if preview_urls|length > 1 %}
+{% if preview_items|length > 1 %}
 <script>
 (function () {
   var photos = document.getElementById('preview-photos');
@@ -104,55 +110,54 @@
   var pointerId = null;
 
   function onStart(clientX, id) {
-    startX = clientX;
-    deltaX = 0;
     swiping = true;
     pointerId = id;
-    slider.classList.add('is-dragging');
+    startX = clientX;
+    deltaX = 0;
     photos.style.transition = 'none';
   }
 
   function onMove(clientX) {
     if (!swiping) return;
     deltaX = clientX - startX;
-    var width = slider.clientWidth || 1;
-    var offset = (-index * 100) + (deltaX / width * 100);
-    photos.style.transform = 'translateX(' + offset + '%)';
+    photos.style.transform = 'translateX(calc(' + (-index * 100) + '% + ' + deltaX + 'px))';
   }
 
   function onEnd() {
     if (!swiping) return;
     swiping = false;
     pointerId = null;
-    slider.classList.remove('is-dragging');
     photos.style.transition = '';
-    if (deltaX <= -40) goTo(index + 1);
-    else if (deltaX >= 40) goTo(index - 1);
-    else goTo(index);
-    deltaX = 0;
+    if (Math.abs(deltaX) > 40) {
+      goTo(index + (deltaX < 0 ? 1 : -1));
+    } else {
+      goTo(index);
+    }
   }
 
-  slider.addEventListener('touchstart', function (e) {
-    if (!e.touches || !e.touches.length) return;
-    onStart(e.touches[0].clientX, 'touch');
+  slider.addEventListener('touchstart', function (event) {
+    if (!event.touches || !event.touches.length) return;
+    onStart(event.touches[0].clientX, 'touch');
   }, { passive: true });
-  slider.addEventListener('touchmove', function (e) {
-    if (!swiping || !e.touches || !e.touches.length) return;
-    onMove(e.touches[0].clientX);
+
+  slider.addEventListener('touchmove', function (event) {
+    if (!swiping || pointerId !== 'touch' || !event.touches || !event.touches.length) return;
+    onMove(event.touches[0].clientX);
   }, { passive: true });
+
   slider.addEventListener('touchend', onEnd);
   slider.addEventListener('touchcancel', onEnd);
 
-  slider.addEventListener('mousedown', function (e) {
-    if (e.button !== 0) return;
-    if (e.target.closest('.preview-slider-dot')) return;
-    e.preventDefault();
-    onStart(e.clientX, 'mouse');
+  slider.addEventListener('mousedown', function (event) {
+    if (event.button !== 0) return;
+    onStart(event.clientX, 'mouse');
   });
-  window.addEventListener('mousemove', function (e) {
+
+  window.addEventListener('mousemove', function (event) {
     if (!swiping || pointerId !== 'mouse') return;
-    onMove(e.clientX);
+    onMove(event.clientX);
   });
+
   window.addEventListener('mouseup', function () {
     if (pointerId !== 'mouse') return;
     onEnd();

@@ -136,6 +136,7 @@ class PostForm(forms.ModelForm):
         has_existing = bool(
             instance and (
                 instance.image
+                or instance.video
                 or instance.media_items.exists()
             )
         )
@@ -171,7 +172,7 @@ class PostForm(forms.ModelForm):
         if not self._has_media(cleaned):
             self.add_error(
                 'image_prompt',
-                'Add photos: generate with AI, pick from saved photos, or upload from your device.',
+                'Add media: generate with AI, pick from saved files, or upload photos/video from your device.',
             )
 
         from .meta import facebook_publish_ready, instagram_publish_ready

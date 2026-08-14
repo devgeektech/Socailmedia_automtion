@@ -2808,7 +2808,8 @@ body.home-page .grid-overlay {
   line-height: 0;
 }
 
-.preview-photo img {
+.preview-photo img,
+.preview-photo video {
   width: 100%;
   height: auto;
   max-height: 420px;
@@ -2817,6 +2818,13 @@ body.home-page .grid-overlay {
   display: block;
   user-select: none;
   -webkit-user-drag: none;
+  background: #0c1f2e;
+}
+
+.preview-photo video {
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  max-height: 420px;
 }
 
 .preview-photo-remove {
@@ -4101,11 +4109,13 @@ body.home-page .grid-overlay {
   aspect-ratio: 1;
 }
 
-.library-pick img {
+.library-pick img,
+.library-pick video {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+  background: #0c1f2e;
 }
 
 .library-pick.is-selected {
@@ -4189,14 +4199,19 @@ body.media-picker-open {
 }
 
 .library-pick-video {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.4rem;
-  color: var(--ink);
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  position: absolute;
+  left: 0.35rem;
+  bottom: 0.35rem;
+  z-index: 1;
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(12, 31, 46, 0.78);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  pointer-events: none;
 }
 
 .media-grid {
@@ -4377,7 +4392,8 @@ body.media-lightbox-open {
   background: rgba(12, 31, 46, 0.03);
 }
 
-.media-lightbox-body img {
+.media-lightbox-body img,
+.media-lightbox-body video {
   max-width: 100%;
   max-height: min(68vh, 640px);
   width: auto;
@@ -4385,6 +4401,7 @@ body.media-lightbox-open {
   object-fit: contain;
   border-radius: 12px;
   display: block;
+  background: #0c1f2e;
 }
 
 .media-lightbox-actions {
@@ -4399,7 +4416,8 @@ body.media-lightbox-open {
     padding: 0.75rem;
   }
 
-  .media-lightbox-body img {
+  .media-lightbox-body img,
+  .media-lightbox-body video {
     max-height: min(58vh, 520px);
   }
 }

@@ -43,8 +43,8 @@
       </div>
 
       <div class="form-group photo-add-group" id="photo-add-group">
-        <label class="form-label">Photos</label>
-        <p class="platform-note photo-chooser-lead" id="photo-chooser-lead">Choose one way to add photos.</p>
+        <label class="form-label">Photos &amp; video</label>
+        <p class="platform-note photo-chooser-lead" id="photo-chooser-lead">Choose one way to add media.</p>
 
         <div class="photo-chooser" id="photo-chooser" role="radiogroup" aria-label="Photo source">
           <label class="photo-radio{% if photo_source == 'device' %} is-selected{% endif %}">
@@ -58,7 +58,7 @@
             </span>
             <span class="photo-radio-copy">
               <strong>From your device</strong>
-              <small>Phone or computer</small>
+              <small>Photos or a video</small>
             </span>
             <span class="photo-radio-mark" aria-hidden="true"></span>
           </label>
@@ -94,7 +94,7 @@
         </div>
 
         <div class="photo-panel" id="photo-panel-device"{% if photo_source != 'device' %} hidden{% endif %}>
-          <p class="platform-note" style="margin-bottom:0.75rem;">Pick one or more photos from your phone or computer.</p>
+          <p class="platform-note" style="margin-bottom:0.75rem;">Upload photos (up to 10) or one video (MP4/MOV) from your phone or computer.</p>
           <button type="button" class="btn-secondary photo-source-btn" id="btn-upload-photos">Choose files</button>
         </div>
 
@@ -120,7 +120,7 @@
           <button type="button" class="btn-secondary photo-source-btn" id="btn-choose-saved">Browse saved photos</button>
         </div>
 
-        <input type="file" name="carousel_files" id="id_carousel_files" class="photo-file-input" accept="image/*" multiple>
+        <input type="file" name="carousel_files" id="id_carousel_files" class="photo-file-input" accept="image/*,video/mp4,video/quicktime,.mp4,.mov,.m4v" multiple>
         <div id="gallery-upload-thumbs" hidden></div>
         <p class="platform-note" id="library-pick-status" aria-live="polite" hidden data-empty=""></p>
         <div id="selected-library-thumbs" hidden></div>
@@ -590,6 +590,28 @@
   var selectedLibraryMeta = {};
   var galleryPreviewItems = [];
   var existingPreviewItems = [];
+  var galleryObjectUrls = [];
+
+  function isVideoFile(file) {
+    if (!file) return false;
+    if (file.type && file.type.indexOf('video/') === 0) return true;
+    var name = (file.name || '').toLowerCase();
+    return /\.(mp4|mov|m4v)$/.test(name);
+  }
+
+  function revokeGalleryObjectUrls() {
+    galleryObjectUrls.forEach(function (url) {
+      try { URL.revokeObjectURL(url); } catch (err) { /* ignore */ }
+    });
+    galleryObjectUrls = [];
+  }
+
+  function mediaTypeOf(item) {
+    if (!item) return 'image';
+    if (item.type === 'video') return 'video';
+    return 'image';
+  }
+
   try {
     var existingEl = document.getElementById('existing-preview-items');
     existingPreviewItems = existingEl ? JSON.parse(existingEl.textContent) : [];
@@ -605,7 +627,12 @@
         var id = String(item.id || '');
         if (!id || !item.url) return;
         if (selectedLibrary.indexOf(id) < 0) selectedLibrary.push(id);
-        selectedLibraryMeta[id] = { id: id, url: item.url, name: item.name || 'Saved photo' };
+        selectedLibraryMeta[id] = {
+          id: id,
+          url: item.url,
+          name: item.name || 'Saved media',
+          type: item.type === 'video' ? 'video' : 'image',
+        };
       });
     }
   } catch (err) { /* ignore */ }
@@ -624,14 +651,42 @@
     syncLibraryStatus();
   }
 
-  function toggleLibrarySelection(id, url, name, forceOn) {
+  function toggleLibrarySelection(id, url, name, forceOn, mediaType) {
     id = String(id || '');
     if (!id) return;
     var idx = selectedLibrary.indexOf(id);
     var shouldSelect = typeof forceOn === 'boolean' ? forceOn : idx < 0;
+    var type = mediaType === 'video' ? 'video' : 'image';
     if (shouldSelect) {
-      if (idx < 0) selectedLibrary.push(id);
-      selectedLibraryMeta[id] = { id: id, url: url || (selectedLibraryMeta[id] && selectedLibraryMeta[id].url) || '', name: name || 'Saved photo' };
+      if (type === 'video') {
+        // Publish supports one video; clear photo picks when a video is chosen
+        selectedLibrary = [];
+        selectedLibraryMeta = {};
+        selectedAi = [];
+        syncGeneratedPaths();
+        revokeGalleryObjectUrls();
+        galleryPreviewItems = [];
+        if (galleryInput) galleryInput.value = '';
+        existingPreviewItems = [];
+        var replaceField = document.getElementById('id_replace_existing_media');
+        if (replaceField) replaceField.value = '1';
+        selectedLibrary.push(id);
+      } else if (idx < 0) {
+        // Drop any previously selected videos when adding photos
+        selectedLibrary = selectedLibrary.filter(function (sid) {
+          return mediaTypeOf(selectedLibraryMeta[sid]) !== 'video';
+        });
+        Object.keys(selectedLibraryMeta).forEach(function (sid) {
+          if (mediaTypeOf(selectedLibraryMeta[sid]) === 'video') delete selectedLibraryMeta[sid];
+        });
+        if (selectedLibrary.indexOf(id) < 0) selectedLibrary.push(id);
+      }
+      selectedLibraryMeta[id] = {
+        id: id,
+        url: url || (selectedLibraryMeta[id] && selectedLibraryMeta[id].url) || '',
+        name: name || (type === 'video' ? 'Saved video' : 'Saved photo'),
+        type: type,
+      };
     } else {
       if (idx >= 0) selectedLibrary.splice(idx, 1);
       delete selectedLibraryMeta[id];
@@ -672,36 +727,56 @@
       items.push(item);
     }
 
-    // Keep current draft/post photos; new uploads/picks are added after them
+    // Keep current draft/post media; new uploads/picks are added after them
     existingPreviewItems.forEach(function (item) {
       if (!item || !item.url) return;
       pushItem({
         source: 'existing',
         id: item.asset_id ? String(item.asset_id) : (item.path || ''),
         url: item.url,
+        type: mediaTypeOf(item),
       });
     });
 
     if (galleryPreviewItems.length) {
       galleryPreviewItems.forEach(function (item, i) {
         if (item && item.url) {
-          pushItem({ source: 'gallery', id: String(i), url: item.url, name: item.name || '' });
+          pushItem({
+            source: 'gallery',
+            id: String(i),
+            url: item.url,
+            name: item.name || '',
+            type: mediaTypeOf(item),
+          });
         }
       });
     } else if (galleryThumbs) {
       galleryThumbs.querySelectorAll('.gallery-upload-thumb').forEach(function (wrap, i) {
-        var img = wrap.querySelector('img');
-        if (img && img.src) {
-          pushItem({ source: 'gallery', id: String(i), url: img.src, name: img.alt || '' });
+        var media = wrap.querySelector('img, video');
+        if (media && media.src) {
+          pushItem({
+            source: 'gallery',
+            id: String(i),
+            url: media.src,
+            name: media.alt || '',
+            type: media.tagName === 'VIDEO' ? 'video' : 'image',
+          });
         }
       });
     }
     selectedLibrary.forEach(function (id) {
       var meta = selectedLibraryMeta[id];
-      if (meta && meta.url) pushItem({ source: 'library', id: id, url: meta.url });
+      if (meta && meta.url) {
+        pushItem({
+          source: 'library',
+          id: id,
+          url: meta.url,
+          type: mediaTypeOf(meta),
+        });
+      }
     });
     selectedAi.forEach(function (item) {
-      if (item.url) pushItem({ source: 'ai', id: item.path || '', url: item.url });
+      if (item.url) pushItem({ source: 'ai', id: item.path || '', url: item.url, type: 'image' });
     });
 
     return items;
@@ -740,16 +815,27 @@
     previewPhotos.style.transform = 'translateX(0)';
     items.forEach(function (item, index) {
       var cell = document.createElement('div');
-      cell.className = 'preview-photo';
-      var img = document.createElement('img');
-      img.src = item.url;
-      img.alt = multi ? ('Photo ' + (index + 1) + ' of ' + items.length) : 'Post photo';
-      img.draggable = false;
-      cell.appendChild(img);
+      cell.className = 'preview-photo' + (mediaTypeOf(item) === 'video' ? ' is-video' : '');
+      if (mediaTypeOf(item) === 'video') {
+        var video = document.createElement('video');
+        video.src = item.url;
+        video.controls = true;
+        video.playsInline = true;
+        video.setAttribute('playsinline', '');
+        video.preload = 'metadata';
+        video.setAttribute('aria-label', multi ? ('Video ' + (index + 1) + ' of ' + items.length) : 'Post video');
+        cell.appendChild(video);
+      } else {
+        var img = document.createElement('img');
+        img.src = item.url;
+        img.alt = multi ? ('Photo ' + (index + 1) + ' of ' + items.length) : 'Post photo';
+        img.draggable = false;
+        cell.appendChild(img);
+      }
       var removeBtn = document.createElement('button');
       removeBtn.type = 'button';
       removeBtn.className = 'preview-photo-remove';
-      removeBtn.setAttribute('aria-label', 'Remove photo');
+      removeBtn.setAttribute('aria-label', mediaTypeOf(item) === 'video' ? 'Remove video' : 'Remove photo');
       removeBtn.textContent = '×';
       removeBtn.addEventListener('click', function (event) {
         event.preventDefault();
@@ -864,6 +950,11 @@
       if (i !== index) dt.items.add(file);
     });
     galleryInput.files = dt.files;
+    var removed = galleryPreviewItems[index];
+    if (removed && removed.type === 'video' && removed.url && removed.url.indexOf('blob:') === 0) {
+      try { URL.revokeObjectURL(removed.url); } catch (err) { /* ignore */ }
+      galleryObjectUrls = galleryObjectUrls.filter(function (u) { return u !== removed.url; });
+    }
     galleryPreviewItems = galleryPreviewItems.filter(function (_, i) { return i !== index; });
     if (galleryThumbs) {
       galleryThumbs.innerHTML = '';
@@ -1026,21 +1117,58 @@
 
   if (galleryInput) {
     galleryInput.addEventListener('change', function () {
+      revokeGalleryObjectUrls();
       galleryPreviewItems = [];
       if (galleryThumbs) {
         galleryThumbs.innerHTML = '';
         galleryThumbs.hidden = true;
       }
-      var files = Array.prototype.slice.call(galleryInput.files || []).slice(0, 10);
+      var rawFiles = Array.prototype.slice.call(galleryInput.files || []);
+      var videoFiles = rawFiles.filter(isVideoFile);
+      var imageFiles = rawFiles.filter(function (f) { return !isVideoFile(f); });
+      var files = [];
+      if (videoFiles.length) {
+        // Social publish supports one video post — keep the first video only
+        files = [videoFiles[0]];
+        var dtVideo = new DataTransfer();
+        dtVideo.items.add(files[0]);
+        galleryInput.files = dtVideo.files;
+        selectedLibrary = [];
+        selectedLibraryMeta = {};
+        selectedAi = [];
+        syncGeneratedPaths();
+        syncLibraryHidden();
+        existingPreviewItems = [];
+        var replaceOnVideo = document.getElementById('id_replace_existing_media');
+        if (replaceOnVideo) replaceOnVideo.value = '1';
+      } else {
+        files = imageFiles.slice(0, 10);
+        if (files.length !== rawFiles.length) {
+          var dtImages = new DataTransfer();
+          files.forEach(function (f) { dtImages.items.add(f); });
+          galleryInput.files = dtImages.files;
+        }
+      }
       if (!files.length) {
         rebuildPreviewFromSelections();
         return;
       }
       var pending = files.length;
       files.forEach(function (file, index) {
+        if (isVideoFile(file)) {
+          var objectUrl = URL.createObjectURL(file);
+          galleryObjectUrls.push(objectUrl);
+          galleryPreviewItems[index] = { url: objectUrl, name: file.name, type: 'video' };
+          pending -= 1;
+          if (pending <= 0) {
+            galleryPreviewItems = galleryPreviewItems.filter(Boolean);
+            rebuildPreviewFromSelections();
+          }
+          return;
+        }
         var reader = new FileReader();
         reader.onload = function (e) {
-          galleryPreviewItems[index] = { url: e.target.result, name: file.name };
+          galleryPreviewItems[index] = { url: e.target.result, name: file.name, type: 'image' };
           pending -= 1;
           if (pending <= 0) {
             galleryPreviewItems = galleryPreviewItems.filter(Boolean);
@@ -1221,6 +1349,7 @@
       selectedAi = [];
       selectedLibrary = [];
       selectedLibraryMeta = {};
+      revokeGalleryObjectUrls();
       galleryPreviewItems = [];
       existingPreviewItems = [];
       syncGeneratedPaths();
@@ -1406,21 +1535,37 @@
     (items || []).forEach(function (item) {
       var id = String(item.id || '');
       if (!id || !item.url) return;
+      var type = item.type === 'video' ? 'video' : 'image';
       var btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'library-pick' + (selectedLibrary.indexOf(id) >= 0 ? ' is-selected' : '');
+      btn.className = 'library-pick' + (selectedLibrary.indexOf(id) >= 0 ? ' is-selected' : '') + (type === 'video' ? ' is-video' : '');
       btn.setAttribute('data-id', id);
       btn.setAttribute('data-url', item.url);
-      btn.title = item.name || 'Saved photo';
-      var img = document.createElement('img');
-      img.src = item.url;
-      img.alt = item.name || 'Saved photo';
-      img.loading = 'lazy';
-      btn.appendChild(img);
+      btn.setAttribute('data-type', type);
+      btn.title = item.name || (type === 'video' ? 'Saved video' : 'Saved photo');
+      if (type === 'video') {
+        var video = document.createElement('video');
+        video.src = item.url;
+        video.muted = true;
+        video.playsInline = true;
+        video.setAttribute('playsinline', '');
+        video.preload = 'metadata';
+        btn.appendChild(video);
+        var badge = document.createElement('span');
+        badge.className = 'library-pick-video';
+        badge.textContent = 'Video';
+        btn.appendChild(badge);
+      } else {
+        var img = document.createElement('img');
+        img.src = item.url;
+        img.alt = item.name || 'Saved photo';
+        img.loading = 'lazy';
+        btn.appendChild(img);
+      }
       btn.addEventListener('click', function () {
         var on = selectedLibrary.indexOf(id) < 0;
-        toggleLibrarySelection(id, item.url, item.name || 'Saved photo', on);
-        btn.classList.toggle('is-selected', on);
+        toggleLibrarySelection(id, item.url, item.name || '', on, type);
+        syncPickerSelectionUI();
         updatePickerCountLabel();
       });
       pickerGrid.appendChild(btn);
@@ -1525,6 +1670,7 @@
     }
 
     function clearDevicePhotos() {
+      revokeGalleryObjectUrls();
       galleryPreviewItems = [];
       if (galleryInput) galleryInput.value = '';
       if (galleryThumbs) {

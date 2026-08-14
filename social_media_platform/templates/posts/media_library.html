@@ -9,7 +9,7 @@
         <div class="logo-icon">◈</div>
         <span class="logo-text">SocialFlow</span>
       </a>
-      <h1 class="dashboard-title">Saved photos</h1>
+      <h1 class="dashboard-title">Media library</h1>
     </div>
     <div class="dashboard-actions">
       <a href="{% url 'posts:create' %}" class="btn-primary">Create post</a>
@@ -19,16 +19,16 @@
 
   <div class="glass-card">
     <h2 class="posts-section-title" style="margin-bottom:0.5rem;">Upload</h2>
-    <p class="platform-note" style="margin-bottom:1rem;">Save photos here so you can reuse them in future posts.</p>
+    <p class="platform-note" style="margin-bottom:1rem;">Save photos or videos here so you can reuse them in future posts.</p>
     <form method="post" action="{% url 'posts:media_upload' %}" enctype="multipart/form-data" class="media-upload-form">
       {% csrf_token %}
-      <input type="file" name="files" class="glass-input" accept="image/*" multiple required>
-      <button type="submit" class="btn-primary" style="width:auto;">Add photos</button>
+      <input type="file" name="files" class="glass-input" accept="image/*,video/mp4,video/quicktime,.mp4,.mov,.m4v" multiple required>
+      <button type="submit" class="btn-primary" style="width:auto;">Add files</button>
     </form>
   </div>
 
   <div class="posts-section-header" style="margin-top:1.5rem;">
-    <h2 class="posts-section-title">Your photos</h2>
+    <h2 class="posts-section-title">Your media</h2>
   </div>
 
   {% if assets %}
@@ -39,22 +39,29 @@
         type="button"
         class="media-card-preview js-media-open"
         data-url="{{ asset.file.url }}"
-        data-title="{% if asset.source == 'ai' %}Made with AI{% elif asset.source == 'upload' %}Uploaded{% else %}{{ asset.get_source_display }}{% endif %}"
+        data-type="{% if asset.kind == 'video' %}video{% else %}image{% endif %}"
+        data-title="{% if asset.kind == 'video' %}Video{% elif asset.source == 'ai' %}Made with AI{% elif asset.source == 'upload' %}Uploaded{% else %}{{ asset.get_source_display }}{% endif %}"
         data-date="{{ asset.created_at|date:'M j, Y' }}"
-        aria-label="View full photo"
+        aria-label="View full {% if asset.kind == 'video' %}video{% else %}photo{% endif %}"
       >
+        {% if asset.kind == 'video' %}
+        <video src="{{ asset.file.url }}" muted playsinline preload="metadata"></video>
+        <span class="media-card-view-hint">Video</span>
+        {% else %}
         <img src="{{ asset.file.url }}" alt="{{ asset.original_name|default:'Saved photo' }}" loading="lazy">
         <span class="media-card-view-hint">View</span>
+        {% endif %}
       </button>
       <div class="media-card-meta">
         <span class="media-card-source">
-          {% if asset.source == 'ai' %}Made with AI
+          {% if asset.kind == 'video' %}Video
+          {% elif asset.source == 'ai' %}Made with AI
           {% elif asset.source == 'upload' %}Uploaded
           {% else %}{{ asset.get_source_display }}{% endif %}
         </span>
         <time class="media-card-date" datetime="{{ asset.created_at|date:'Y-m-d' }}">{{ asset.created_at|date:"M j, Y" }}</time>
       </div>
-      <form method="post" action="{% url 'posts:media_delete' asset.pk %}" onsubmit="return confirm('Remove this photo from your library?');">
+      <form method="post" action="{% url 'posts:media_delete' asset.pk %}" onsubmit="return confirm('Remove this from your library?');">
         {% csrf_token %}
         <button type="submit" class="btn-secondary btn-sm media-card-delete">Delete</button>
       </form>
@@ -63,7 +70,7 @@
   </div>
   {% else %}
   <div class="glass-card empty-state">
-    <p>No photos yet. Upload some here, or create them with AI while making a post.</p>
+    <p>No media yet. Upload photos or videos here, or create images with AI while making a post.</p>
   </div>
   {% endif %}
 </div>
@@ -79,7 +86,8 @@
       <button type="button" class="btn-secondary btn-sm js-media-close" aria-label="Close">Close</button>
     </div>
     <div class="media-lightbox-body">
-      <img src="" alt="Full size photo" id="media-lightbox-image">
+      <img src="" alt="Full size photo" id="media-lightbox-image" hidden>
+      <video src="" controls playsinline id="media-lightbox-video" hidden></video>
     </div>
     <div class="media-lightbox-actions">
       <button type="button" class="btn-secondary js-media-close">Cancel</button>
@@ -93,14 +101,32 @@
 (function () {
   var lightbox = document.getElementById('media-lightbox');
   var image = document.getElementById('media-lightbox-image');
+  var video = document.getElementById('media-lightbox-video');
   var title = document.getElementById('media-lightbox-title');
   var dateEl = document.getElementById('media-lightbox-date');
   if (!lightbox || !image) return;
 
-  function openLightbox(url, label, dateText) {
-    image.src = url || '';
-    image.alt = label || 'Full size photo';
-    if (title) title.textContent = label || 'Photo';
+  function openLightbox(url, label, dateText, mediaType) {
+    var isVideo = mediaType === 'video';
+    if (image) {
+      image.hidden = isVideo;
+      if (!isVideo) {
+        image.src = url || '';
+        image.alt = label || 'Full size photo';
+      } else {
+        image.removeAttribute('src');
+      }
+    }
+    if (video) {
+      video.hidden = !isVideo;
+      if (isVideo) {
+        video.src = url || '';
+      } else {
+        video.pause();
+        video.removeAttribute('src');
+      }
+    }
+    if (title) title.textContent = label || (isVideo ? 'Video' : 'Photo');
     if (dateEl) {
       dateEl.textContent = dateText || '';
       dateEl.hidden = !dateText;
@@ -114,7 +140,11 @@
   function closeLightbox() {
     lightbox.hidden = true;
     document.body.classList.remove('media-lightbox-open');
-    image.removeAttribute('src');
+    if (image) image.removeAttribute('src');
+    if (video) {
+      video.pause();
+      video.removeAttribute('src');
+    }
   }
 
   document.querySelectorAll('.js-media-open').forEach(function (btn) {
@@ -122,7 +152,8 @@
       openLightbox(
         btn.getAttribute('data-url'),
         btn.getAttribute('data-title'),
-        btn.getAttribute('data-date')
+        btn.getAttribute('data-date'),
+        btn.getAttribute('data-type')
       );
     });
   });
