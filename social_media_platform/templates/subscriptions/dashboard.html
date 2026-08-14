@@ -114,6 +114,10 @@
       <div class="stat-value">{{ stats.published }}</div>
       <div class="stat-label">Published</div>
     </button>
+    <button type="button" class="glass-card stat-card post-tab{% if filters.status == 'publishing' %} is-active{% endif %}" role="tab" aria-selected="{% if filters.status == 'publishing' %}true{% else %}false{% endif %}" data-tab="publishing">
+      <div class="stat-value">{{ stats.publishing }}</div>
+      <div class="stat-label">Publishing</div>
+    </button>
     <button type="button" class="glass-card stat-card post-tab{% if filters.status == 'draft' %} is-active{% endif %}" role="tab" aria-selected="{% if filters.status == 'draft' %}true{% else %}false{% endif %}" data-tab="draft">
       <div class="stat-value">{{ stats.drafts }}</div>
       <div class="stat-label">Drafts</div>
@@ -132,6 +136,7 @@
     <div class="posts-section-header">
       <h2 class="posts-section-title" id="posts-tab-title">
         {% if filters.status == 'published' %}Published posts
+        {% elif filters.status == 'publishing' %}Publishing posts
         {% elif filters.status == 'draft' %}Draft posts
         {% elif filters.status == 'scheduled' %}Scheduled posts
         {% elif filters.status == 'failed' %}Failed posts
@@ -174,10 +179,12 @@
   var resetBtn = document.getElementById('filter-reset');
   var tabs = document.querySelectorAll('.post-tab');
   var searchTimer = null;
+  var publishingRefreshTimer = null;
   var fetchSeq = 0;
   var titles = {
     all: 'Your posts',
     published: 'Published posts',
+    publishing: 'Publishing posts',
     draft: 'Draft posts',
     scheduled: 'Scheduled posts',
     failed: 'Failed posts'
@@ -283,6 +290,7 @@
         if (seq !== fetchSeq || !results) return;
         results.innerHTML = html;
         bindCarousels();
+        schedulePublishingRefresh();
       })
       .catch(function () {
         if (seq !== fetchSeq || !results) return;
@@ -291,6 +299,12 @@
       .finally(function () {
         if (seq === fetchSeq && results) results.classList.remove('is-loading');
       });
+  }
+
+  function schedulePublishingRefresh() {
+    clearTimeout(publishingRefreshTimer);
+    if (!results || !results.querySelector('[data-status="publishing"]')) return;
+    publishingRefreshTimer = setTimeout(applyFilters, 3000);
   }
 
   if (form) {
@@ -344,6 +358,7 @@
 
   bindCarousels();
   syncClearButton();
+  schedulePublishingRefresh();
 })();
 </script>
 {% endblock %}

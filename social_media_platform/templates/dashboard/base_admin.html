@@ -76,6 +76,140 @@
       if (toast) toast.remove();
     });
   </script>
+  <script>
+  (function () {
+    var form = document.querySelector('[data-ajax-filters]');
+    var results = document.getElementById('admin-results');
+    var meta = document.getElementById('admin-list-meta');
+    if (!form || !results) return;
+
+    var searchField = form.querySelector('[name="q"]');
+    var statusField = form.querySelector('[name="status"]');
+    var userField = form.querySelector('[name="user"]');
+    var searchTimer = null;
+    var fetchSeq = 0;
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function currentParams(extra) {
+      var params = new URLSearchParams();
+      if (searchField && searchField.value.trim()) params.set('q', searchField.value.trim());
+      if (statusField && statusField.value) params.set('status', statusField.value);
+      userField = form.querySelector('[name="user"]');
+      if (userField && userField.value) params.set('user', userField.value);
+      if (extra) {
+        Object.keys(extra).forEach(function (key) {
+          if (extra[key]) params.set(key, extra[key]);
+          else params.delete(key);
+        });
+      }
+      return params;
+    }
+
+    function syncStatusChips() {
+      var current = statusField ? statusField.value : '';
+      document.querySelectorAll('.js-admin-status-chip').forEach(function (chip) {
+        chip.classList.toggle('is-active', (chip.getAttribute('data-status') || '') === current);
+      });
+    }
+
+    function updateMeta(inner) {
+      if (!meta || !inner) return;
+      var label = inner.getAttribute('data-meta') || '';
+      var hasUser = inner.getAttribute('data-has-user-filter') === '1';
+      var userName = inner.getAttribute('data-filter-user') || '';
+      if (hasUser && userName) {
+        var clearHref = window.location.pathname;
+        if (statusField && statusField.value) {
+          clearHref += '?status=' + encodeURIComponent(statusField.value);
+        }
+        meta.innerHTML =
+          escapeHtml(label) +
+          ' · filtered by <strong>' + escapeHtml(userName) + '</strong> ' +
+          '<a href="' + clearHref + '" class="auth-link js-admin-clear-user">Clear</a>';
+      } else {
+        meta.textContent = label;
+      }
+    }
+
+    function applyFilters(extra) {
+      var params = currentParams(extra);
+      var seq = ++fetchSeq;
+      results.classList.add('is-loading');
+      syncStatusChips();
+
+      var display = new URLSearchParams(params.toString());
+      var url = window.location.pathname + (display.toString() ? '?' + display.toString() : '');
+      window.history.replaceState({}, '', url);
+
+      params.set('partial', '1');
+      fetch(window.location.pathname + '?' + params.toString(), {
+        credentials: 'same-origin',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'text/html'
+        }
+      })
+        .then(function (res) {
+          if (!res.ok) throw new Error('Could not filter results.');
+          return res.text();
+        })
+        .then(function (html) {
+          if (seq !== fetchSeq) return;
+          results.innerHTML = html;
+          updateMeta(results.querySelector('.admin-results-inner'));
+        })
+        .catch(function () {
+          if (seq !== fetchSeq) return;
+          results.innerHTML = '<section class="glass-card admin-panel"><p class="admin-empty">Could not load results. Refresh and try again.</p></section>';
+        })
+        .finally(function () {
+          if (seq === fetchSeq) results.classList.remove('is-loading');
+        });
+    }
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      applyFilters();
+    });
+
+    if (searchField) {
+      searchField.addEventListener('input', function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(function () { applyFilters(); }, 250);
+      });
+    }
+    if (statusField) {
+      statusField.addEventListener('change', function () { applyFilters(); });
+    }
+
+    document.querySelectorAll('.js-admin-status-chip').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        var value = chip.getAttribute('data-status') || '';
+        if (statusField) {
+          statusField.value = statusField.value === value ? '' : value;
+        }
+        applyFilters();
+      });
+    });
+
+    document.addEventListener('click', function (event) {
+      var clearLink = event.target.closest('.js-admin-clear-user');
+      if (!clearLink) return;
+      event.preventDefault();
+      var existing = form.querySelector('[name="user"]');
+      if (existing) existing.remove();
+      userField = null;
+      applyFilters({ user: '' });
+    });
+  })();
+  </script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>

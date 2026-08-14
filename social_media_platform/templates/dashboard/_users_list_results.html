@@ -1,0 +1,58 @@
+<div class="admin-results-inner" data-meta="{{ total }} user{{ total|pluralize }}">
+  <section class="glass-card admin-panel">
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Email</th>
+            <th>Account</th>
+            <th>Plan</th>
+            <th>Posts</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in user_rows %}
+          <tr>
+            <td>
+              <strong>{{ row.user.get_full_name|default:row.user.email }}</strong>
+              <div class="admin-muted">{{ row.user.email }} · joined {{ row.user.date_joined|date:"M j, Y" }}</div>
+            </td>
+            <td>{{ row.user.email|default:"—" }}</td>
+            <td>
+              {% if row.user.is_active %}
+              <span class="admin-badge status-active">Active</span>
+              {% else %}
+              <span class="admin-badge status-inactive">Inactive</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if row.subscription %}
+              <span class="admin-badge status-{{ row.subscription.status }}">{{ row.subscription.plan.name }}</span>
+              {% else %}
+              <span class="admin-muted">No plan</span>
+              {% endif %}
+            </td>
+            <td>{{ row.post_count }}</td>
+            <td class="admin-actions-cell">
+              <a href="{% url 'dashboard:user_detail' row.user.id %}" class="admin-link-btn">Full view</a>
+              <a href="{% url 'dashboard:subscriptions' %}?user={{ row.user.id }}" class="admin-link-btn">Subscriptions</a>
+              <a href="{% url 'dashboard:posts' %}?user={{ row.user.id }}" class="admin-link-btn">Posts</a>
+              <form method="post" action="{% url 'dashboard:user_toggle_active' row.user.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" class="admin-link-btn {% if row.user.is_active %}admin-link-danger{% endif %}">
+                  {% if row.user.is_active %}Deactivate{% else %}Activate{% endif %}
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="admin-empty">No users found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>

@@ -233,24 +233,14 @@ class PostForm(forms.ModelForm):
         return post
 
     def apply_publish_action(self, post):
-        from .meta import MetaAPIError
-        from .publisher import publish_post
-
         action = self.cleaned_data['publish_action']
         if action == self.PUBLISH_NOW:
-            try:
-                publish_post(post)
-                post.refresh_from_db()
-            except MetaAPIError as exc:
-                from .instagram_login import is_instagram_not_ready
+            from .publisher import enqueue_publish
 
-                post.refresh_from_db()
-                if is_instagram_not_ready(exc) and (post.facebook_post_id or post.instagram_media_id):
-                    post.mark_published()
-                    return post
-                post.status = Post.STATUS_FAILED
-                post.save(update_fields=['status', 'updated_at'])
-                raise
+            post.mark_publishing()
+            # Give the dashboard time to render a reliable cancel button before
+            # any request is sent to Meta.
+            enqueue_publish(post.pk, grace_seconds=10.0)
         else:
             post.mark_scheduled(self.cleaned_data['scheduled_at'])
         return post

@@ -16,6 +16,13 @@ from subscriptions.models import Plan, UserSubscription
 from .decorators import superadmin_required
 
 
+def _wants_partial(request):
+    return (
+        request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or (request.GET.get('partial') or '') == '1'
+    )
+
+
 def _purchase_amount_annotation():
     """Prefer recorded payment amount, else plan price (trials count as 0)."""
     return Case(
@@ -275,12 +282,16 @@ def users_list_view(request):
             'post_count': user.post_count,
         })
 
-    return render(request, 'dashboard/users_list.html', {
+    ctx = {
         'user_rows': user_rows,
         'q': q,
         'status': status,
         'total': len(user_rows),
-    })
+        'request': request,
+    }
+    if _wants_partial(request):
+        return render(request, 'dashboard/_users_list_results.html', ctx)
+    return render(request, 'dashboard/users_list.html', ctx)
 
 
 @superadmin_required
@@ -384,14 +395,18 @@ def subscriptions_list_view(request):
             | Q(latest_invoice_id__icontains=q)
         )
 
-    return render(request, 'dashboard/subscriptions_list.html', {
+    ctx = {
         'subscriptions': subs,
         'q': q,
         'status': status,
         'filter_user': filter_user,
         'status_choices': UserSubscription.STATUS_CHOICES,
         'total': subs.count(),
-    })
+        'request': request,
+    }
+    if _wants_partial(request):
+        return render(request, 'dashboard/_subscriptions_list_results.html', ctx)
+    return render(request, 'dashboard/subscriptions_list.html', ctx)
 
 
 @superadmin_required
@@ -421,7 +436,8 @@ def subscription_detail_view(request, sub_id):
 def posts_list_view(request):
     from posts.publisher import publish_due_posts
 
-    publish_due_posts()
+    if not _wants_partial(request):
+        publish_due_posts()
 
     q = request.GET.get('q', '').strip()
     status = request.GET.get('status', '').strip()
@@ -430,7 +446,13 @@ def posts_list_view(request):
     posts = Post.objects.select_related('user').order_by('-created_at')
     filter_user = None
 
-    if status in {Post.STATUS_SCHEDULED, Post.STATUS_PUBLISHED, Post.STATUS_DRAFT, Post.STATUS_FAILED}:
+    if status in {
+        Post.STATUS_SCHEDULED,
+        Post.STATUS_PUBLISHED,
+        Post.STATUS_DRAFT,
+        Post.STATUS_FAILED,
+        Post.STATUS_PUBLISHING,
+    }:
         posts = posts.filter(status=status)
     if user_id.isdigit():
         filter_user = User.objects.filter(pk=int(user_id), is_superuser=False).first()
@@ -441,17 +463,23 @@ def posts_list_view(request):
             Q(description__icontains=q)
             | Q(caption__icontains=q)
             | Q(user__username__icontains=q)
+            | Q(user__email__icontains=q)
             | Q(image_prompt__icontains=q)
         )
 
-    return render(request, 'dashboard/posts_list.html', {
+    total = posts.count()
+    ctx = {
         'posts': posts[:200],
         'q': q,
         'status': status,
         'filter_user': filter_user,
-        'total': posts.count(),
+        'total': total,
         'status_choices': Post.STATUS_CHOICES,
-    })
+        'request': request,
+    }
+    if _wants_partial(request):
+        return render(request, 'dashboard/_posts_list_results.html', ctx)
+    return render(request, 'dashboard/posts_list.html', ctx)
 
 
 @superadmin_required

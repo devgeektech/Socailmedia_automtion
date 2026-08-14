@@ -19,6 +19,11 @@ def start_publish_scheduler():
     global _started
     import sys
 
+    # Tests manage temporary databases and must not have a daemon thread
+    # querying or holding those databases open.
+    if any(arg == 'test' or arg.endswith('pytest') for arg in sys.argv):
+        return
+
     # Under Django runserver autoreload, only start in the child process.
     using_runserver = any('runserver' in arg for arg in sys.argv)
     if using_runserver and os.environ.get('RUN_MAIN') != 'true':

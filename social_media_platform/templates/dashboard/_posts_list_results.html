@@ -1,0 +1,55 @@
+<div class="admin-results-inner" data-meta="{{ total }} post{{ total|pluralize }}"{% if filter_user %} data-has-user-filter="1" data-filter-user="{{ filter_user.get_full_name|default:filter_user.email }}"{% endif %}>
+  <section class="glass-card admin-panel">
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Media</th>
+            <th>User</th>
+            <th>Content</th>
+            <th>Status</th>
+            <th>Schedule / publish</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for post in posts %}
+          <tr>
+            <td>
+              {% if post.image %}
+              <img src="{{ post.image.url }}" alt="" class="admin-post-thumb">
+              {% elif post.video %}
+              <div class="admin-post-thumb admin-post-thumb-empty">▶</div>
+              {% else %}
+              <div class="admin-post-thumb admin-post-thumb-empty">◈</div>
+              {% endif %}
+            </td>
+            <td>
+              <a href="{% url 'dashboard:user_detail' post.user_id %}" class="auth-link">{{ post.user.get_full_name|default:post.user.email }}</a>
+            </td>
+            <td>
+              <strong>{{ post.description|truncatechars:90 }}</strong>
+              {% if post.caption %}<div class="admin-muted">{{ post.caption|truncatechars:60 }}</div>{% endif %}
+            </td>
+            <td><span class="admin-badge status-{{ post.status }}">{{ post.get_status_display }}</span></td>
+            <td>
+              {% if post.status == 'scheduled' and post.scheduled_at %}
+              Scheduled {{ post.scheduled_at|date:"M j, Y · g:i A" }}
+              {% elif post.status == 'published' and post.published_at %}
+              Published {{ post.published_at|date:"M j, Y · g:i A" }}
+              {% elif post.status == 'publishing' %}
+              Publishing…
+              {% else %}
+              Created {{ post.created_at|date:"M j, Y" }}
+              {% endif %}
+            </td>
+            <td><a href="{% url 'dashboard:post_detail' post.id %}" class="admin-link-btn">Full view</a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="admin-empty">No posts found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>

@@ -383,12 +383,20 @@ def post_caption_text(post) -> str:
     return caption or description
 
 
-def publish_facebook_photo(*, page_id: str, page_token: str, image_path: Path, caption: str) -> str:
+def publish_facebook_photo(
+    *,
+    page_id: str,
+    page_token: str,
+    image_path: Path,
+    caption: str,
+    cancel_check=lambda: None,
+) -> str:
     """Upload a photo to a Facebook Page. Returns the Graph post/photo id."""
     if not image_path.is_file():
         raise MetaAPIError('Image file not found for Facebook publish.')
     url = f'{graph_base()}/{page_id}/photos'
     mime = _image_mime(image_path)
+    cancel_check()
     with image_path.open('rb') as fh:
         files = {'source': (image_path.name, fh, mime)}
         data = {'caption': caption, 'access_token': page_token, 'published': 'true'}
@@ -419,6 +427,7 @@ def publish_facebook_carousel(
     page_token: str,
     image_paths: list[Path],
     caption: str,
+    cancel_check=lambda: None,
 ) -> str:
     """Upload multiple unpublished photos, then publish as one multi-photo feed post."""
     paths = [Path(p) for p in image_paths if p]
@@ -429,6 +438,7 @@ def publish_facebook_carousel(
     url = f'{graph_base()}/{page_id}/photos'
     with httpx.Client(timeout=120.0) as client:
         for image_path in paths[:10]:
+            cancel_check()
             if not image_path.is_file():
                 raise MetaAPIError(f'Image file not found: {image_path.name}')
             mime = _image_mime(image_path)
@@ -448,6 +458,9 @@ def publish_facebook_carousel(
                 raise MetaAPIError('Facebook did not return a photo id for multi-photo item.')
             media_fbids.append(str(mid))
 
+    # Unpublished uploads are harmless; this is the point that makes the
+    # carousel visible on Facebook.
+    cancel_check()
     feed_url = f'{graph_base()}/{page_id}/feed'
     # Graph expects attached_media[n] as a JSON object string: {"media_fbid":"..."}
     data = {
@@ -467,11 +480,21 @@ def publish_facebook_carousel(
     return str(post_id)
 
 
-def publish_facebook_video(*, page_id: str, page_token: str, video_path: Path, caption: str) -> str:
+def publish_facebook_video(
+    *,
+    page_id: str,
+    page_token: str,
+    video_path: Path,
+    caption: str,
+    cancel_check=lambda: None,
+) -> str:
     """Upload a video to a Facebook Page. Returns the video id."""
     if not video_path.is_file():
         raise MetaAPIError('Video file not found for Facebook publish.')
     url = f'{graph_base()}/{page_id}/videos'
+    # Facebook's single-video endpoint publishes as part of the upload. Once
+    # this POST starts, Meta may complete it even if the local request closes.
+    cancel_check()
     with video_path.open('rb') as fh:
         files = {'source': (video_path.name, fh, 'video/mp4')}
         data = {
@@ -548,7 +571,12 @@ def publish_instagram_photo(
     return str(media_id)
 
 
-def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
+def publish_post_to_meta(
+    post,
+    *,
+    platforms: set[str] | None = None,
+    cancel_check=lambda: None,
+) -> dict:
     """
     Publish a post to Facebook and/or Instagram via Graph API.
     Supports single image, carousel (multi-image), and video.
@@ -559,12 +587,17 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
 
     from .models import Post
 
-    want_fb = post.publish_to_facebook if platforms is None else 'facebook' in platforms
-    want_ig = post.publish_to_instagram if platforms is None else 'instagram' in platforms
+    want_fb = (
+        post.publish_to_facebook if platforms is None else 'facebook' in platforms
+    ) and not post.facebook_post_id
+    want_ig = (
+        post.publish_to_instagram if platforms is None else 'instagram' in platforms
+    ) and not post.instagram_media_id
 
     if not want_fb and not want_ig:
         return {'facebook': None, 'instagram': None}
 
+    cancel_check()
     is_video = post.media_type == Post.MEDIA_VIDEO or bool(post.video)
     carousel_paths = post.carousel_image_paths() if not is_video else []
     is_carousel = (not is_video) and (
@@ -608,6 +641,7 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
                     page_token=creds['page_token'],
                     video_path=Path(post.video.path),
                     caption=caption,
+                    cancel_check=cancel_check,
                 )
             elif is_carousel:
                 fb_task = lambda: publish_facebook_carousel(  # noqa: E731
@@ -615,6 +649,7 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
                     page_token=creds['page_token'],
                     image_paths=carousel_paths,
                     caption=caption,
+                    cancel_check=cancel_check,
                 )
             else:
                 fb_task = lambda: publish_facebook_photo(  # noqa: E731
@@ -622,6 +657,7 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
                     page_token=creds['page_token'],
                     image_path=Path(post.image.path),
                     caption=caption,
+                    cancel_check=cancel_check,
                 )
         except MetaAPIError as exc:
             errors.append(f'Facebook: {exc}')
@@ -638,6 +674,7 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
                     access_token=ig_creds['access_token'],
                     video_url=video_url,
                     caption=caption,
+                    cancel_check=cancel_check,
                 )
             elif is_carousel:
                 urls = []
@@ -660,6 +697,7 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
                     access_token=ig_creds['access_token'],
                     image_urls=urls,
                     caption=caption,
+                    cancel_check=cancel_check,
                 )
             else:
                 image_url = instagram_publish_image_url(Path(post.image.path), post.image.url)
@@ -668,6 +706,7 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
                     access_token=ig_creds['access_token'],
                     image_url=image_url,
                     caption=caption,
+                    cancel_check=cancel_check,
                 )
         except MetaAPIError as exc:
             if isinstance(exc, InstagramStillProcessing) or is_instagram_not_ready(exc):
@@ -677,7 +716,9 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
 
     fb_id, fb_exc, ig_id, ig_exc = _run_publish_tasks(fb_task, ig_task)
 
-    if fb_exc is not None:
+    from .publisher import PublishCancelled
+
+    if fb_exc is not None and not isinstance(fb_exc, PublishCancelled):
         if not isinstance(fb_exc, MetaAPIError):
             logger.exception(
                 'Unexpected Facebook publish error for post id=%s',
@@ -697,7 +738,7 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
         ])
         logger.info('Published post id=%s to Facebook', post.pk)
 
-    if ig_exc is not None:
+    if ig_exc is not None and not isinstance(ig_exc, PublishCancelled):
         if isinstance(ig_exc, InstagramStillProcessing) or (
             isinstance(ig_exc, MetaAPIError) and is_instagram_not_ready(ig_exc)
         ):

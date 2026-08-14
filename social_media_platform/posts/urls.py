@@ -15,5 +15,6 @@ urlpatterns = [
     path('posts/<int:pk>/duplicate/', views.post_duplicate_view, name='duplicate'),
     path('posts/<int:pk>/delete/', views.post_delete_view, name='delete'),
     path('posts/<int:pk>/preview/', views.post_preview_view, name='preview'),
+    path('posts/<int:pk>/cancel-publish/', views.cancel_publish_view, name='cancel_publish'),
     path('posts/<int:pk>/publish-platform/', views.publish_platform_view, name='publish_platform'),
 ]

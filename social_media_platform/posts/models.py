@@ -49,12 +49,14 @@ class MediaAsset(models.Model):
 
 class Post(models.Model):
     STATUS_DRAFT = 'draft'
+    STATUS_PUBLISHING = 'publishing'
     STATUS_SCHEDULED = 'scheduled'
     STATUS_PUBLISHED = 'published'
     STATUS_FAILED = 'failed'
 
     STATUS_CHOICES = [
         (STATUS_DRAFT, 'Draft'),
+        (STATUS_PUBLISHING, 'Publishing'),
         (STATUS_SCHEDULED, 'Scheduled'),
         (STATUS_PUBLISHED, 'Published'),
         (STATUS_FAILED, 'Failed'),
@@ -90,6 +92,8 @@ class Post(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
     scheduled_at = models.DateTimeField(blank=True, null=True)
     published_at = models.DateTimeField(blank=True, null=True)
+    cancel_requested = models.BooleanField(default=False)
+    publish_started_at = models.DateTimeField(blank=True, null=True)
 
     publish_to_facebook = models.BooleanField(default=False)
     publish_to_instagram = models.BooleanField(default=False)
@@ -114,6 +118,14 @@ class Post(models.Model):
     @property
     def is_published(self):
         return self.status == self.STATUS_PUBLISHED
+
+    @property
+    def is_publishing(self):
+        return self.status == self.STATUS_PUBLISHING
+
+    @property
+    def can_cancel_publish(self):
+        return self.is_publishing and not self.cancel_requested
 
     @property
     def can_edit(self):
@@ -154,18 +166,51 @@ class Post(models.Model):
     def mark_published(self):
         self.status = self.STATUS_PUBLISHED
         self.published_at = timezone.now()
-        self.save(update_fields=['status', 'published_at', 'updated_at'])
+        self.cancel_requested = False
+        self.save(update_fields=['status', 'published_at', 'cancel_requested', 'updated_at'])
+
+    def mark_publishing(self):
+        self.status = self.STATUS_PUBLISHING
+        self.scheduled_at = None
+        self.published_at = None
+        self.cancel_requested = False
+        self.publish_started_at = timezone.now()
+        self.save(update_fields=[
+            'status',
+            'scheduled_at',
+            'published_at',
+            'cancel_requested',
+            'publish_started_at',
+            'updated_at',
+        ])
 
     def mark_scheduled(self, when):
         self.status = self.STATUS_SCHEDULED
         self.scheduled_at = when
         self.published_at = None
-        self.save(update_fields=['status', 'scheduled_at', 'published_at', 'updated_at'])
+        self.cancel_requested = False
+        self.publish_started_at = None
+        self.save(update_fields=[
+            'status',
+            'scheduled_at',
+            'published_at',
+            'cancel_requested',
+            'publish_started_at',
+            'updated_at',
+        ])
 
     def mark_draft(self):
         self.status = self.STATUS_DRAFT
         self.published_at = None
-        self.save(update_fields=['status', 'published_at', 'updated_at'])
+        self.cancel_requested = False
+        self.publish_started_at = None
+        self.save(update_fields=[
+            'status',
+            'published_at',
+            'cancel_requested',
+            'publish_started_at',
+            'updated_at',
+        ])
 
     def duplicate_for(self, user):
         """Create a draft copy for the user (new caption/date editable)."""

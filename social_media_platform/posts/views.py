@@ -237,7 +237,12 @@ def _handle_post_submit(request, form, *, post=None):
             return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
         raise
 
-    if post.status == Post.STATUS_PUBLISHED:
+    if post.status == Post.STATUS_PUBLISHING:
+        messages.success(
+            request,
+            'Publishing started. You can cancel it from the dashboard while it is still pending.',
+        )
+    elif post.status == Post.STATUS_PUBLISHED:
         messages.success(request, 'Post published successfully.')
     else:
         from django.utils import timezone as dj_tz
@@ -252,6 +257,37 @@ def _handle_post_submit(request, form, *, post=None):
         else:
             messages.success(request, 'Your post is scheduled.')
     return redirect(reverse('subscriptions:dashboard') + '?clear_post_draft=1')
+
+
+@subscription_required
+@require_POST
+def cancel_publish_view(request, pk):
+    """Request cancellation for a background publish owned by this user."""
+    post = _user_post_or_404(request, pk)
+    if post.status != Post.STATUS_PUBLISHING:
+        messages.info(request, 'This post is no longer waiting to publish.')
+        return redirect('subscriptions:dashboard')
+
+    if post.facebook_post_id or post.instagram_media_id:
+        messages.warning(
+            request,
+            'A social platform has already accepted this post, so it cannot be fully cancelled.',
+        )
+        return redirect('subscriptions:dashboard')
+
+    updated = Post.objects.filter(
+        pk=post.pk,
+        user=request.user,
+        status=Post.STATUS_PUBLISHING,
+    ).update(cancel_requested=True)
+    if updated:
+        messages.success(
+            request,
+            'Cancellation requested. It will return to Draft unless a platform already accepted it.',
+        )
+    else:
+        messages.info(request, 'This post is no longer waiting to publish.')
+    return redirect('subscriptions:dashboard')
 
 
 def _attach_ai_image(post, form, *, force_regenerate=False):

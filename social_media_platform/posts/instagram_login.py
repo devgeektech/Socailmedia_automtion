@@ -197,6 +197,7 @@ def _wait_for_ig_login_container(
     *,
     timeout: float = 45.0,
     client: httpx.Client | None = None,
+    cancel_check=lambda: None,
 ) -> None:
     """
     Poll until Instagram finishes processing, backing off from a short first
@@ -211,6 +212,7 @@ def _wait_for_ig_login_container(
     attempt = 0
     try:
         while True:
+            cancel_check()
             attempt += 1
             resp = http.get(
                 url,
@@ -250,12 +252,15 @@ def _publish_with_retry(
     access_token: str,
     creation_id: str,
     timeout: float = 45.0,
+    cancel_check=lambda: None,
 ) -> dict:
     """Publish a finished container, retrying only while Instagram reports 9007."""
     deadline = time.monotonic() + timeout
     delay = 1.0
     published: dict = {}
     while True:
+        # This is Instagram's irreversible accept point.
+        cancel_check()
         published = _publish_container(
             ig_user_id=ig_user_id,
             access_token=access_token,
@@ -282,9 +287,17 @@ def _publish_container(*, ig_user_id: str, access_token: str, creation_id: str) 
         return resp.json()
 
 
-def publish_instagram_login_photo(*, ig_user_id: str, access_token: str, image_url: str, caption: str) -> str:
+def publish_instagram_login_photo(
+    *,
+    ig_user_id: str,
+    access_token: str,
+    image_url: str,
+    caption: str,
+    cancel_check=lambda: None,
+) -> str:
     """Create + publish a feed photo via graph.instagram.com. Returns media id."""
     create_url = f'{ig_graph_base()}/{ig_user_id}/media'
+    cancel_check()
     with httpx.Client(timeout=60.0) as client:
         resp = client.post(
             create_url,
@@ -300,13 +313,19 @@ def publish_instagram_login_photo(*, ig_user_id: str, access_token: str, image_u
     if not creation_id:
         raise MetaAPIError('Instagram did not return a creation id.')
 
-    _wait_for_ig_login_container(str(creation_id), access_token, timeout=45.0)
+    _wait_for_ig_login_container(
+        str(creation_id),
+        access_token,
+        timeout=45.0,
+        cancel_check=cancel_check,
+    )
 
     published = _publish_with_retry(
         ig_user_id=ig_user_id,
         access_token=access_token,
         creation_id=str(creation_id),
         timeout=30.0,
+        cancel_check=cancel_check,
     )
 
     err = published.get('error') if isinstance(published, dict) else None
@@ -464,6 +483,7 @@ def publish_instagram_login_carousel(
     access_token: str,
     image_urls: list[str],
     caption: str,
+    cancel_check=lambda: None,
 ) -> str:
     """Publish an Instagram multi-photo post (2–10 images)."""
     if len(image_urls) < 2:
@@ -477,6 +497,7 @@ def publish_instagram_login_carousel(
         # Create every child first so Instagram processes them in parallel,
         # then wait once per child instead of serialising create+wait.
         for image_url in image_urls:
+            cancel_check()
             resp = client.post(
                 create_url,
                 data={
@@ -494,8 +515,15 @@ def publish_instagram_login_carousel(
 
         for cid in child_ids:
             # Meta requires every child container to finish before the parent.
-            _wait_for_ig_login_container(cid, access_token, timeout=60.0, client=client)
+            _wait_for_ig_login_container(
+                cid,
+                access_token,
+                timeout=60.0,
+                client=client,
+                cancel_check=cancel_check,
+            )
 
+        cancel_check()
         children = ','.join(child_ids)
         resp = client.post(
             create_url,
@@ -512,13 +540,20 @@ def publish_instagram_login_carousel(
         if not creation_id:
             raise MetaAPIError('Instagram did not return a multi-photo creation id.')
 
-        _wait_for_ig_login_container(str(creation_id), access_token, timeout=60.0, client=client)
+        _wait_for_ig_login_container(
+            str(creation_id),
+            access_token,
+            timeout=60.0,
+            client=client,
+            cancel_check=cancel_check,
+        )
 
     published = _publish_with_retry(
         ig_user_id=ig_user_id,
         access_token=access_token,
         creation_id=str(creation_id),
         timeout=45.0,
+        cancel_check=cancel_check,
     )
 
     err = published.get('error') if isinstance(published, dict) else None
@@ -537,9 +572,11 @@ def publish_instagram_login_video(
     access_token: str,
     video_url: str,
     caption: str,
+    cancel_check=lambda: None,
 ) -> str:
     """Publish an Instagram feed video (Reels-compatible container)."""
     create_url = f'{ig_graph_base()}/{ig_user_id}/media'
+    cancel_check()
     with httpx.Client(timeout=60.0) as client:
         resp = client.post(
             create_url,
@@ -558,13 +595,19 @@ def publish_instagram_login_video(
         raise MetaAPIError('Instagram did not return a video creation id.')
 
     # Video transcoding genuinely takes longer than photos
-    _wait_for_ig_login_container(str(creation_id), access_token, timeout=180.0)
+    _wait_for_ig_login_container(
+        str(creation_id),
+        access_token,
+        timeout=180.0,
+        cancel_check=cancel_check,
+    )
 
     published = _publish_with_retry(
         ig_user_id=ig_user_id,
         access_token=access_token,
         creation_id=str(creation_id),
         timeout=90.0,
+        cancel_check=cancel_check,
     )
 
     err = published.get('error') if isinstance(published, dict) else None

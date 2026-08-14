@@ -1,0 +1,45 @@
+<div class="admin-results-inner" data-meta="{{ total }} subscription{{ total|pluralize }}"{% if filter_user %} data-has-user-filter="1" data-filter-user="{{ filter_user.get_full_name|default:filter_user.email }}"{% endif %}>
+  <section class="glass-card admin-panel">
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Plan</th>
+            <th>Status</th>
+            <th>Start</th>
+            <th>Expiry</th>
+            <th>Latest receipt</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in subscriptions %}
+          <tr>
+            <td>
+              <a href="{% url 'dashboard:user_detail' s.user_id %}" class="auth-link">{{ s.user.get_full_name|default:s.user.email }}</a>
+              <div class="admin-muted">{{ s.user.email }}</div>
+            </td>
+            <td>{{ s.plan.name }}{% if s.is_trial %} <span class="admin-muted">(trial)</span>{% endif %}</td>
+            <td><span class="admin-badge status-{{ s.status }}">{{ s.get_status_display }}</span></td>
+            <td>{{ s.start_date|date:"M j, Y" }}</td>
+            <td>{{ s.expiry_date|date:"M j, Y" }}</td>
+            <td>
+              {% if s.latest_receipt_url %}
+              <a href="{{ s.latest_receipt_url }}" target="_blank" rel="noopener" class="auth-link">Receipt</a>
+              {% elif s.latest_payment_amount != None %}
+              {{ s.latest_payment_currency|upper }} {{ s.latest_payment_amount }}
+              {% else %}
+              <span class="admin-muted">—</span>
+              {% endif %}
+            </td>
+            <td><a href="{% url 'dashboard:subscription_detail' s.id %}" class="admin-link-btn">Full view</a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" class="admin-empty">No subscriptions found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>

@@ -56,6 +56,7 @@ def dashboard_view(request):
     stats = {
         'total': posts.count(),
         'drafts': posts.filter(status=Post.STATUS_DRAFT).count(),
+        'publishing': posts.filter(status=Post.STATUS_PUBLISHING).count(),
         'scheduled': posts.filter(status=Post.STATUS_SCHEDULED).count(),
         'published': posts.filter(status=Post.STATUS_PUBLISHED).count(),
         'failed': posts.filter(status=Post.STATUS_FAILED).count(),
@@ -78,6 +79,7 @@ def dashboard_view(request):
         )
     if status in {
         Post.STATUS_DRAFT,
+        Post.STATUS_PUBLISHING,
         Post.STATUS_SCHEDULED,
         Post.STATUS_PUBLISHED,
         Post.STATUS_FAILED,
