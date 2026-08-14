@@ -191,13 +191,28 @@ def is_instagram_not_ready(exc: Exception) -> bool:
     return '9007' in text or 'media id is not available' in text or 'not ready for publishing' in text
 
 
-def _wait_for_ig_login_container(creation_id: str, access_token: str, *, attempts: int = 30) -> None:
-    """Poll until Instagram finishes processing. 9007 is treated as 'still waiting'."""
+def _wait_for_ig_login_container(
+    creation_id: str,
+    access_token: str,
+    *,
+    timeout: float = 45.0,
+    client: httpx.Client | None = None,
+) -> None:
+    """
+    Poll until Instagram finishes processing, backing off from a short first
+    check so ready images are not held up by fixed sleeps. 9007 means
+    'still waiting'.
+    """
     url = f'{ig_graph_base()}/{creation_id}'
-    time.sleep(5)
-    with httpx.Client(timeout=30.0) as client:
-        for attempt in range(attempts):
-            resp = client.get(
+    owns_client = client is None
+    http = client or httpx.Client(timeout=30.0)
+    deadline = time.monotonic() + timeout
+    delay = 0.5
+    attempt = 0
+    try:
+        while True:
+            attempt += 1
+            resp = http.get(
                 url,
                 params={'fields': 'status_code,status', 'access_token': access_token},
             )
@@ -205,28 +220,56 @@ def _wait_for_ig_login_container(creation_id: str, access_token: str, *, attempt
             if isinstance(data, dict) and data.get('error'):
                 err = data.get('error') or {}
                 code = err.get('code')
-                if code in {9007, 24}:
-                    logger.info(
-                        'Instagram container %s not ready yet (status error %s), waiting…',
-                        creation_id,
-                        code,
+                if code not in {9007, 24}:
+                    _raise_for_graph(data, fallback='Instagram container status failed')
+            else:
+                status = _container_status(data)
+                if status == 'FINISHED':
+                    logger.info('Instagram container %s ready after %s check(s)', creation_id, attempt)
+                    return
+                if status in {'ERROR', 'EXPIRED'}:
+                    detail = data.get('status') or status
+                    raise MetaAPIError(
+                        f'Instagram could not process the image ({detail}). '
+                        'Use a public HTTPS image URL and a JPEG/PNG between 4:5 and 1.91:1.'
                     )
-                    time.sleep(3)
-                    continue
-                _raise_for_graph(data, fallback='Instagram container status failed')
-            status = _container_status(data)
-            logger.info('Instagram container %s status=%s attempt=%s', creation_id, status or 'UNKNOWN', attempt + 1)
-            if status == 'FINISHED':
-                time.sleep(3)
-                return
-            if status in {'ERROR', 'EXPIRED'}:
-                detail = data.get('status') or status
-                raise MetaAPIError(
-                    f'Instagram could not process the image ({detail}). '
-                    'Use a public HTTPS image URL and a JPEG/PNG between 4:5 and 1.91:1.'
-                )
-            time.sleep(3)
-    # Still processing — publish step will keep retrying 9007 instead of erroring here.
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(delay, remaining))
+            delay = min(delay * 1.6, 3.0)
+    finally:
+        if owns_client:
+            http.close()
+    # Still processing — publish step keeps retrying 9007 instead of erroring here.
+
+
+def _publish_with_retry(
+    *,
+    ig_user_id: str,
+    access_token: str,
+    creation_id: str,
+    timeout: float = 45.0,
+) -> dict:
+    """Publish a finished container, retrying only while Instagram reports 9007."""
+    deadline = time.monotonic() + timeout
+    delay = 1.0
+    published: dict = {}
+    while True:
+        published = _publish_container(
+            ig_user_id=ig_user_id,
+            access_token=access_token,
+            creation_id=creation_id,
+        )
+        err = published.get('error') if isinstance(published, dict) else None
+        if not (err and err.get('code') == 9007):
+            return published
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return published
+        logger.info('Instagram container %s still processing (9007), retrying', creation_id)
+        time.sleep(min(delay, remaining))
+        delay = min(delay * 1.5, 4.0)
 
 
 def _publish_container(*, ig_user_id: str, access_token: str, creation_id: str) -> dict:
@@ -257,21 +300,14 @@ def publish_instagram_login_photo(*, ig_user_id: str, access_token: str, image_u
     if not creation_id:
         raise MetaAPIError('Instagram did not return a creation id.')
 
-    _wait_for_ig_login_container(str(creation_id), access_token)
+    _wait_for_ig_login_container(str(creation_id), access_token, timeout=45.0)
 
-    published = {}
-    for attempt in range(20):
-        published = _publish_container(
-            ig_user_id=ig_user_id,
-            access_token=access_token,
-            creation_id=str(creation_id),
-        )
-        err = published.get('error') if isinstance(published, dict) else None
-        if err and err.get('code') == 9007:
-            logger.info('Instagram still processing (9007) attempt %s — waiting silently', attempt + 1)
-            time.sleep(4)
-            continue
-        break
+    published = _publish_with_retry(
+        ig_user_id=ig_user_id,
+        access_token=access_token,
+        creation_id=str(creation_id),
+        timeout=30.0,
+    )
 
     err = published.get('error') if isinstance(published, dict) else None
     if err and err.get('code') == 9007:
@@ -310,13 +346,47 @@ def _fit_instagram_aspect(img):
     return img.crop((left, 0, left + min(new_w, width - left), height))
 
 
+_IG_MAX_SIDE = 1920
+
+
+def _needs_instagram_prep(source: Path) -> bool:
+    """Cheap check: only re-encode when Instagram would actually reject the file."""
+    if source.suffix.lower() not in {'.jpg', '.jpeg'}:
+        return True
+    try:
+        from PIL import Image
+
+        with Image.open(source) as img:
+            width, height = img.size
+            exif_orientation = 1
+            try:
+                exif = img.getexif()
+                exif_orientation = int(exif.get(274) or 1) if exif else 1
+            except Exception:
+                exif_orientation = 1
+    except Exception:
+        return True
+    if width < 1 or height < 1:
+        return True
+    if exif_orientation != 1:
+        return True
+    if max(width, height) > _IG_MAX_SIDE:
+        return True
+    ratio = width / height
+    return not (_IG_MIN_ASPECT <= ratio <= _IG_MAX_ASPECT)
+
+
 def prepare_instagram_image_file(image_path: Path) -> Path | None:
     """
-    Return a JPEG path Instagram can publish (valid aspect ratio + RGB JPEG).
-    Always writes under media/posts/ig_ready/.
+    Return a JPEG path Instagram can publish (valid aspect ratio + RGB JPEG),
+    or None when the original file is already acceptable.
+    Prepared files are written under media/posts/ig_ready/.
     """
     source = Path(image_path) if image_path else None
     if not source or not source.is_file():
+        return None
+    if not _needs_instagram_prep(source):
+        logger.info('Instagram can use %s as-is; skipping re-encode', source.name)
         return None
     try:
         from PIL import Image, ImageOps
@@ -328,16 +398,14 @@ def prepare_instagram_image_file(image_path: Path) -> Path | None:
             img = ImageOps.exif_transpose(img)
             rgb = img.convert('RGB')
             fitted = _fit_instagram_aspect(rgb)
-            # Keep a reasonable publish size without making tiny images
-            max_side = 1920
             w, h = fitted.size
-            if max(w, h) > max_side:
-                scale = max_side / float(max(w, h))
+            if max(w, h) > _IG_MAX_SIDE:
+                scale = _IG_MAX_SIDE / float(max(w, h))
                 fitted = fitted.resize(
                     (max(1, int(w * scale)), max(1, int(h * scale))),
-                    Image.Resampling.LANCZOS,
+                    Image.Resampling.BILINEAR,
                 )
-            fitted.save(out_path, format='JPEG', quality=92, optimize=True)
+            fitted.save(out_path, format='JPEG', quality=88)
         logger.info(
             'Prepared Instagram JPEG %s from %s',
             out_path.name,
@@ -406,6 +474,8 @@ def publish_instagram_login_carousel(
     child_ids: list[str] = []
     create_url = f'{ig_graph_base()}/{ig_user_id}/media'
     with httpx.Client(timeout=60.0) as client:
+        # Create every child first so Instagram processes them in parallel,
+        # then wait once per child instead of serialising create+wait.
         for image_url in image_urls:
             resp = client.post(
                 create_url,
@@ -421,11 +491,12 @@ def publish_instagram_login_carousel(
             if not cid:
                 raise MetaAPIError('Instagram did not return a photo item id.')
             child_ids.append(str(cid))
-            # Meta requires each child container to finish before creating the parent.
-            _wait_for_ig_login_container(str(cid), access_token, attempts=24)
 
-    children = ','.join(child_ids)
-    with httpx.Client(timeout=60.0) as client:
+        for cid in child_ids:
+            # Meta requires every child container to finish before the parent.
+            _wait_for_ig_login_container(cid, access_token, timeout=60.0, client=client)
+
+        children = ','.join(child_ids)
         resp = client.post(
             create_url,
             data={
@@ -436,26 +507,19 @@ def publish_instagram_login_carousel(
             },
         )
         parent = resp.json()
-    _raise_for_graph(parent, fallback='Instagram multi-photo create failed')
-    creation_id = parent.get('id')
-    if not creation_id:
-        raise MetaAPIError('Instagram did not return a multi-photo creation id.')
+        _raise_for_graph(parent, fallback='Instagram multi-photo create failed')
+        creation_id = parent.get('id')
+        if not creation_id:
+            raise MetaAPIError('Instagram did not return a multi-photo creation id.')
 
-    _wait_for_ig_login_container(str(creation_id), access_token, attempts=24)
+        _wait_for_ig_login_container(str(creation_id), access_token, timeout=60.0, client=client)
 
-    published = {}
-    for attempt in range(20):
-        published = _publish_container(
-            ig_user_id=ig_user_id,
-            access_token=access_token,
-            creation_id=str(creation_id),
-        )
-        err = published.get('error') if isinstance(published, dict) else None
-        if err and err.get('code') == 9007:
-            logger.info('Instagram multi-photo still processing (9007) attempt %s', attempt + 1)
-            time.sleep(4)
-            continue
-        break
+    published = _publish_with_retry(
+        ig_user_id=ig_user_id,
+        access_token=access_token,
+        creation_id=str(creation_id),
+        timeout=45.0,
+    )
 
     err = published.get('error') if isinstance(published, dict) else None
     if err and err.get('code') == 9007:
@@ -493,21 +557,15 @@ def publish_instagram_login_video(
     if not creation_id:
         raise MetaAPIError('Instagram did not return a video creation id.')
 
-    _wait_for_ig_login_container(str(creation_id), access_token, attempts=40)
+    # Video transcoding genuinely takes longer than photos
+    _wait_for_ig_login_container(str(creation_id), access_token, timeout=180.0)
 
-    published = {}
-    for attempt in range(30):
-        published = _publish_container(
-            ig_user_id=ig_user_id,
-            access_token=access_token,
-            creation_id=str(creation_id),
-        )
-        err = published.get('error') if isinstance(published, dict) else None
-        if err and err.get('code') == 9007:
-            logger.info('Instagram video still processing (9007) attempt %s', attempt + 1)
-            time.sleep(5)
-            continue
-        break
+    published = _publish_with_retry(
+        ig_user_id=ig_user_id,
+        access_token=access_token,
+        creation_id=str(creation_id),
+        timeout=90.0,
+    )
 
     err = published.get('error') if isinstance(published, dict) else None
     if err and err.get('code') == 9007:

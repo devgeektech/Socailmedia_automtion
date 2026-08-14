@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -584,68 +585,55 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
     result = {'facebook': None, 'instagram': None}
     update_fields: list[str] = []
 
+    from .instagram_login import (
+        InstagramStillProcessing,
+        instagram_publish_image_url,
+        is_instagram_not_ready,
+        public_video_url_for_instagram,
+        publish_instagram_login_carousel,
+        publish_instagram_login_photo,
+        publish_instagram_login_video,
+        resolve_instagram_login_credentials,
+    )
+
+    # Resolve credentials, file paths, and public URLs up front so the network
+    # calls below can run on worker threads without touching the DB or ORM.
+    fb_task = None
     if want_fb:
         try:
             creds = resolve_publish_credentials(post.user)
             if is_video:
-                fb_id = publish_facebook_video(
+                fb_task = lambda: publish_facebook_video(  # noqa: E731
                     page_id=creds['page_id'],
                     page_token=creds['page_token'],
                     video_path=Path(post.video.path),
                     caption=caption,
                 )
             elif is_carousel:
-                fb_id = publish_facebook_carousel(
+                fb_task = lambda: publish_facebook_carousel(  # noqa: E731
                     page_id=creds['page_id'],
                     page_token=creds['page_token'],
                     image_paths=carousel_paths,
                     caption=caption,
                 )
             else:
-                fb_id = publish_facebook_photo(
+                fb_task = lambda: publish_facebook_photo(  # noqa: E731
                     page_id=creds['page_id'],
                     page_token=creds['page_token'],
                     image_path=Path(post.image.path),
                     caption=caption,
                 )
-            result['facebook'] = fb_id
-            post.facebook_post_id = fb_id
-            post.facebook_published_at = timezone.now()
-            post.publish_to_facebook = True
-            update_fields.extend([
-                'facebook_post_id',
-                'facebook_published_at',
-                'publish_to_facebook',
-            ])
-            logger.info(
-                'Published post id=%s to Facebook page %s (via %s)',
-                post.pk,
-                creds['page_id'],
-                creds.get('source'),
-            )
         except MetaAPIError as exc:
             errors.append(f'Facebook: {exc}')
-        except Exception as exc:
-            logger.exception('Unexpected Facebook publish error for post id=%s', post.pk)
-            errors.append(f'Facebook: {exc}')
 
+    ig_task = None
+    ig_creds = None
     if want_ig:
-        from .instagram_login import (
-            InstagramStillProcessing,
-            instagram_publish_image_url,
-            is_instagram_not_ready,
-            public_video_url_for_instagram,
-            publish_instagram_login_carousel,
-            publish_instagram_login_photo,
-            publish_instagram_login_video,
-            resolve_instagram_login_credentials,
-        )
-
         try:
             ig_creds = resolve_instagram_login_credentials(post.user)
             if is_video:
                 video_url = public_video_url_for_instagram(post.video.url)
-                ig_id = publish_instagram_login_video(
+                ig_task = lambda: publish_instagram_login_video(  # noqa: E731
                     ig_user_id=ig_creds['ig_user_id'],
                     access_token=ig_creds['access_token'],
                     video_url=video_url,
@@ -667,7 +655,7 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
                         rel = str(Path(p).relative_to(Path(settings.MEDIA_ROOT))).replace('\\', '/')
                         media_url = f'{settings.MEDIA_URL.rstrip("/")}/{rel}'
                         urls.append(instagram_publish_image_url(p, media_url))
-                ig_id = publish_instagram_login_carousel(
+                ig_task = lambda: publish_instagram_login_carousel(  # noqa: E731
                     ig_user_id=ig_creds['ig_user_id'],
                     access_token=ig_creds['access_token'],
                     image_urls=urls,
@@ -675,38 +663,67 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
                 )
             else:
                 image_url = instagram_publish_image_url(Path(post.image.path), post.image.url)
-                ig_id = publish_instagram_login_photo(
+                ig_task = lambda: publish_instagram_login_photo(  # noqa: E731
                     ig_user_id=ig_creds['ig_user_id'],
                     access_token=ig_creds['access_token'],
                     image_url=image_url,
                     caption=caption,
                 )
-            result['instagram'] = ig_id
-            post.instagram_media_id = ig_id
-            post.instagram_published_at = timezone.now()
-            post.publish_to_instagram = True
-            update_fields.extend([
-                'instagram_media_id',
-                'instagram_published_at',
-                'publish_to_instagram',
-            ])
-            logger.info(
-                'Published post id=%s to Instagram %s (via %s)',
-                post.pk,
-                ig_creds['ig_user_id'],
-                ig_creds.get('source'),
-            )
         except MetaAPIError as exc:
             if isinstance(exc, InstagramStillProcessing) or is_instagram_not_ready(exc):
-                logger.warning(
-                    'Instagram still processing post id=%s; not showing 9007 to the user',
-                    post.pk,
-                )
+                logger.warning('Instagram not ready for post id=%s', post.pk)
             else:
                 errors.append(f'Instagram: {exc}')
-        except Exception as exc:
-            logger.exception('Unexpected Instagram publish error for post id=%s', post.pk)
-            errors.append(f'Instagram: {exc}')
+
+    fb_id, fb_exc, ig_id, ig_exc = _run_publish_tasks(fb_task, ig_task)
+
+    if fb_exc is not None:
+        if not isinstance(fb_exc, MetaAPIError):
+            logger.exception(
+                'Unexpected Facebook publish error for post id=%s',
+                post.pk,
+                exc_info=fb_exc,
+            )
+        errors.append(f'Facebook: {fb_exc}')
+    elif fb_id:
+        result['facebook'] = fb_id
+        post.facebook_post_id = fb_id
+        post.facebook_published_at = timezone.now()
+        post.publish_to_facebook = True
+        update_fields.extend([
+            'facebook_post_id',
+            'facebook_published_at',
+            'publish_to_facebook',
+        ])
+        logger.info('Published post id=%s to Facebook', post.pk)
+
+    if ig_exc is not None:
+        if isinstance(ig_exc, InstagramStillProcessing) or (
+            isinstance(ig_exc, MetaAPIError) and is_instagram_not_ready(ig_exc)
+        ):
+            logger.warning(
+                'Instagram still processing post id=%s; not showing 9007 to the user',
+                post.pk,
+            )
+        else:
+            if not isinstance(ig_exc, MetaAPIError):
+                logger.exception(
+                    'Unexpected Instagram publish error for post id=%s',
+                    post.pk,
+                    exc_info=ig_exc,
+                )
+            errors.append(f'Instagram: {ig_exc}')
+    elif ig_id:
+        result['instagram'] = ig_id
+        post.instagram_media_id = ig_id
+        post.instagram_published_at = timezone.now()
+        post.publish_to_instagram = True
+        update_fields.extend([
+            'instagram_media_id',
+            'instagram_published_at',
+            'publish_to_instagram',
+        ])
+        logger.info('Published post id=%s to Instagram', post.pk)
 
     if update_fields:
         update_fields.append('updated_at')
@@ -715,3 +732,29 @@ def publish_post_to_meta(post, *, platforms: set[str] | None = None) -> dict:
     if errors:
         raise MetaAPIError(' · '.join(errors))
     return result
+
+
+def _run_publish_tasks(fb_task, ig_task):
+    """
+    Run the Facebook and Instagram uploads at the same time so the user waits
+    for the slower one instead of both. Returns (fb_id, fb_exc, ig_id, ig_exc).
+    """
+    def _call(task):
+        if task is None:
+            return None, None
+        try:
+            return task(), None
+        except Exception as exc:
+            return None, exc
+
+    if fb_task is not None and ig_task is not None:
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix='meta-publish') as pool:
+            fb_future = pool.submit(_call, fb_task)
+            ig_future = pool.submit(_call, ig_task)
+            fb_id, fb_exc = fb_future.result()
+            ig_id, ig_exc = ig_future.result()
+        return fb_id, fb_exc, ig_id, ig_exc
+
+    fb_id, fb_exc = _call(fb_task)
+    ig_id, ig_exc = _call(ig_task)
+    return fb_id, fb_exc, ig_id, ig_exc

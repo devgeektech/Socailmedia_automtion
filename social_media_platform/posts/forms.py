@@ -1,7 +1,13 @@
+from datetime import timedelta
+
 from django import forms
 from django.utils import timezone
 
 from .models import Post
+
+# Large uploads can take minutes, so the chosen schedule time may already be in
+# the past by the time the request finishes. Accept it instead of failing.
+SCHEDULE_GRACE = timedelta(minutes=20)
 
 
 class PostForm(forms.ModelForm):
@@ -166,8 +172,13 @@ class PostForm(forms.ModelForm):
                         timezone.get_current_timezone(),
                     )
                     cleaned['scheduled_at'] = scheduled_at
-                if scheduled_at <= timezone.now():
-                    self.add_error('scheduled_at', 'Schedule time must be in the future.')
+                now = timezone.now()
+                if scheduled_at <= now:
+                    if now - scheduled_at <= SCHEDULE_GRACE:
+                        # Time slipped past while the upload was still in flight
+                        cleaned['scheduled_at'] = now + timedelta(seconds=15)
+                    else:
+                        self.add_error('scheduled_at', 'Schedule time must be in the future.')
 
         if not self._has_media(cleaned):
             self.add_error(

@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from django.core.files import File
-from django.core.files.base import ContentFile
 
 from .models import MediaAsset, Post, PostMedia
 
@@ -67,20 +66,31 @@ def clear_post_media(post: Post) -> None:
     post.media_items.all().delete()
 
 
+def _copy_asset_into(field, asset: MediaAsset, name: str) -> None:
+    """Stream an asset file into a post FileField without buffering it in memory."""
+    asset.file.open('rb')
+    try:
+        field.save(name, File(asset.file), save=False)
+    finally:
+        try:
+            asset.file.close()
+        except Exception:
+            pass
+
+
 def attach_carousel_from_assets(post: Post, assets: list[MediaAsset]) -> None:
     clear_post_media(post)
     image_assets = [a for a in assets if a.kind == MediaAsset.KIND_IMAGE]
-    for idx, asset in enumerate(image_assets[:10]):
-        PostMedia.objects.create(post=post, asset=asset, order=idx)
+    PostMedia.objects.bulk_create([
+        PostMedia(post=post, asset=asset, order=idx)
+        for idx, asset in enumerate(image_assets[:10])
+    ])
     if image_assets:
         first = image_assets[0]
         # Keep Post.image as cover for dashboard/preview
-        first.file.open('rb')
-        data = first.file.read()
-        first.file.close()
         if post.image:
             post.image.delete(save=False)
-        post.image.save(f'cover_{first.pk}_{Path(first.file.name).name}', ContentFile(data), save=False)
+        _copy_asset_into(post.image, first, f'cover_{first.pk}_{Path(first.file.name).name}')
         if post.video:
             post.video.delete(save=False)
             post.video = None
@@ -90,12 +100,9 @@ def attach_carousel_from_assets(post: Post, assets: list[MediaAsset]) -> None:
 
 def attach_video_from_asset(post: Post, asset: MediaAsset) -> None:
     clear_post_media(post)
-    asset.file.open('rb')
-    data = asset.file.read()
-    asset.file.close()
     if post.video:
         post.video.delete(save=False)
-    post.video.save(f'vid_{asset.pk}_{Path(asset.file.name).name}', ContentFile(data), save=False)
+    _copy_asset_into(post.video, asset, f'vid_{asset.pk}_{Path(asset.file.name).name}')
     if post.image:
         post.image.delete(save=False)
         post.image = None
@@ -105,12 +112,9 @@ def attach_video_from_asset(post: Post, asset: MediaAsset) -> None:
 
 def attach_single_image_asset(post: Post, asset: MediaAsset) -> None:
     clear_post_media(post)
-    asset.file.open('rb')
-    data = asset.file.read()
-    asset.file.close()
     if post.image:
         post.image.delete(save=False)
-    post.image.save(f'img_{asset.pk}_{Path(asset.file.name).name}', ContentFile(data), save=False)
+    _copy_asset_into(post.image, asset, f'img_{asset.pk}_{Path(asset.file.name).name}')
     if post.video:
         post.video.delete(save=False)
         post.video = None

@@ -139,6 +139,7 @@
         <div class="form-group schedule-field" id="schedule-field">
           <label class="form-label" for="{{ form.scheduled_at.id_for_label }}">{{ form.scheduled_at.label }}</label>
           {{ form.scheduled_at }}
+          <p class="platform-note" style="margin-top:0.4rem;">Large uploads take a moment, so pick a time at least a few minutes out.</p>
           {% if form.scheduled_at.errors %}<p class="form-error">{{ form.scheduled_at.errors.0 }}</p>{% endif %}
         </div>
       </fieldset>
@@ -1191,10 +1192,23 @@
     }
   }
 
+  function localDateTimeValue(date) {
+    var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) +
+      'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+  }
+
+  function refreshScheduleMin() {
+    if (!scheduledAt) return;
+    var soonest = new Date(Date.now() + 3 * 60 * 1000);
+    scheduledAt.min = localDateTimeValue(soonest);
+  }
+
   function updateScheduleUI() {
     var selected = document.querySelector('input[name="publish_action"]:checked');
     var isSchedule = selected && selected.value === 'schedule';
     if (scheduleField) scheduleField.style.display = isSchedule ? 'block' : 'none';
+    if (isSchedule) refreshScheduleMin();
     if (previewStatus) {
       previewStatus.textContent = isSchedule ? 'Scheduled preview' : 'Publish now preview';
     }
