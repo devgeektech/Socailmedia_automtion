@@ -257,7 +257,7 @@
           </div>
         </div>
         <div class="social-preview-media{% if is_edit and existing_preview_urls %} has-image{% endif %}" id="preview-media">
-          <div class="preview-media-placeholder" id="preview-placeholder" {% if is_edit and existing_preview_urls %}hidden{% endif %}>Your photos will appear here</div>
+          <div class="preview-media-placeholder" id="preview-placeholder" {% if is_edit and existing_preview_urls %}hidden{% endif %}>Your post will appear here</div>
           <div class="preview-slider" id="preview-slider" {% if not is_edit or not existing_preview_urls %}hidden{% endif %}>
             <div class="preview-photos" id="preview-photos"></div>
             <div class="preview-slider-dots" id="preview-slider-dots" hidden></div>
@@ -1276,10 +1276,7 @@
       if (saveDraftField) saveDraftField.value = '';
       pendingAction = 'publish';
       var loadingText = document.getElementById('submit-btn-loading-text');
-      var hasFiles = galleryInput && galleryInput.files && galleryInput.files.length > 0;
-      if (loadingText) {
-        loadingText.textContent = hasFiles ? 'Uploading…' : 'Starting…';
-      }
+      if (loadingText) loadingText.textContent = 'Uploading';
       if (saveDraftBtn) {
         saveDraftBtn.disabled = true;
         saveDraftBtn.classList.add('is-disabled');
