@@ -2668,6 +2668,15 @@ body.home-page .grid-overlay {
   margin-bottom: 0.75rem;
 }
 
+.upload-progress {
+  margin-top: 0.6rem;
+  margin-bottom: 0;
+}
+
+.upload-progress.is-error {
+  color: var(--coral);
+}
+
 .schedule-field {
   margin-top: 0.25rem;
 }

@@ -96,6 +96,7 @@
         <div class="photo-panel" id="photo-panel-device"{% if photo_source != 'device' %} hidden{% endif %}>
           <p class="platform-note" style="margin-bottom:0.75rem;">Upload photos (up to 10) or one video (MP4/MOV) from your phone or computer.</p>
           <button type="button" class="btn-secondary photo-source-btn" id="btn-upload-photos">Choose files</button>
+          <p class="platform-note upload-progress" id="upload-progress" aria-live="polite" hidden></p>
         </div>
 
         <div class="photo-panel" id="photo-panel-ai"{% if photo_source != 'ai' %} hidden{% endif %}>
@@ -1116,6 +1117,86 @@
     });
   }
 
+  var QUICK_UPLOAD_URL = '{% url "posts:media_quick_upload" %}';
+  var uploadProgressEl = document.getElementById('upload-progress');
+  var uploadInFlight = false;
+
+  function setUploadStatus(text, isError) {
+    if (!uploadProgressEl) return;
+    uploadProgressEl.textContent = text || '';
+    uploadProgressEl.hidden = !text;
+    uploadProgressEl.classList.toggle('is-error', !!isError);
+  }
+
+  function syncSubmitAvailability() {
+    if (!submitBtn || formLocked) return;
+    submitBtn.disabled = uploadInFlight;
+    submitBtn.classList.toggle('is-disabled', uploadInFlight);
+  }
+
+  // Files are sent to the library as soon as they are picked, so submitting the
+  // post does not have to upload them again.
+  function uploadPickedFiles(files) {
+    if (!files.length) return;
+    var body = new FormData();
+    files.forEach(function (file) { body.append('files', file); });
+    body.append('csrfmiddlewaretoken', csrfToken());
+
+    uploadInFlight = true;
+    syncSubmitAvailability();
+    setUploadStatus('Uploading… 0%');
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', QUICK_UPLOAD_URL, true);
+    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+    xhr.upload.addEventListener('progress', function (event) {
+      if (!event.lengthComputable) return;
+      var pct = Math.round((event.loaded / event.total) * 100);
+      setUploadStatus('Uploading… ' + Math.min(99, pct) + '%');
+    });
+
+    xhr.addEventListener('load', function () {
+      uploadInFlight = false;
+      var data = {};
+      try { data = JSON.parse(xhr.responseText || '{}'); } catch (err) { data = {}; }
+      if (xhr.status < 200 || xhr.status >= 300 || !data.ok) {
+        setUploadStatus((data && data.error) || 'Upload failed. Try again.', true);
+        syncSubmitAvailability();
+        return;
+      }
+      // Move uploaded files from the raw input into saved library selections
+      if (galleryInput) galleryInput.value = '';
+      revokeGalleryObjectUrls();
+      galleryPreviewItems = [];
+      (data.items || []).forEach(function (item) {
+        var id = String(item.id);
+        if (selectedLibrary.indexOf(id) < 0) selectedLibrary.push(id);
+        selectedLibraryMeta[id] = {
+          id: id,
+          url: item.url,
+          name: item.name || 'Saved media',
+          type: item.type === 'video' ? 'video' : 'image',
+        };
+      });
+      syncLibraryHidden();
+      rebuildPreviewFromSelections();
+      setUploadStatus('Upload complete.');
+      syncSubmitAvailability();
+      setTimeout(function () {
+        if (!uploadInFlight) setUploadStatus('');
+      }, 2500);
+    });
+
+    xhr.addEventListener('error', function () {
+      uploadInFlight = false;
+      setUploadStatus('Upload failed. Check your connection and try again.', true);
+      syncSubmitAvailability();
+    });
+
+    xhr.send(body);
+  }
+
   if (galleryInput) {
     galleryInput.addEventListener('change', function () {
       revokeGalleryObjectUrls();
@@ -1164,6 +1245,7 @@
           if (pending <= 0) {
             galleryPreviewItems = galleryPreviewItems.filter(Boolean);
             rebuildPreviewFromSelections();
+            uploadPickedFiles(files);
           }
           return;
         }
@@ -1174,6 +1256,7 @@
           if (pending <= 0) {
             galleryPreviewItems = galleryPreviewItems.filter(Boolean);
             rebuildPreviewFromSelections();
+            uploadPickedFiles(files);
           }
         };
         reader.readAsDataURL(file);
@@ -1224,7 +1307,15 @@
     }
   }
 
-  if (description) description.addEventListener('input', updateText);
+  if (description) {
+    description.addEventListener('input', function () {
+      updateText();
+      if (description.value.trim()) {
+        var staleErr = document.querySelector('.js-client-desc-error');
+        if (staleErr) staleErr.remove();
+      }
+    });
+  }
   if (caption) caption.addEventListener('input', updateText);
   if (scheduledAt) scheduledAt.addEventListener('change', updateScheduleUI);
   document.querySelectorAll('input[name="publish_action"]').forEach(function (el) {
@@ -1324,6 +1415,39 @@
       // Set hidden field BEFORE disabling buttons — disabled submit buttons are omitted from POST
       if (saveDraftField) saveDraftField.value = isDraftSubmit ? '1' : '';
       syncLibraryIdsFromPreview(collectPreviewItems());
+
+      function abortSubmit() {
+        event.preventDefault();
+        if (saveDraftField) saveDraftField.value = '';
+        if (aiStatus) aiStatus.textContent = '';
+        pendingAction = null;
+        formLocked = false;
+        setActionBusy(false, null);
+      }
+
+      if (uploadInFlight) {
+        abortSubmit();
+        setUploadStatus('Still uploading your file — this will be ready in a moment.');
+        return;
+      }
+
+      // Catch missing text before the browser sends anything, so a long upload
+      // is never wasted on a validation error.
+      if (!isDraftSubmit) {
+        var descError = document.querySelector('.js-client-desc-error');
+        if (descError) descError.remove();
+        if (description && !description.value.trim()) {
+          abortSubmit();
+          var descField = description.closest('.form-group') || description.parentNode;
+          var descErrEl = document.createElement('p');
+          descErrEl.className = 'form-error js-client-desc-error';
+          descErrEl.textContent = 'Add a description before publishing.';
+          if (descField) descField.appendChild(descErrEl);
+          description.focus();
+          description.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+      }
 
       if (!isDraftSubmit && selected && selected.value === 'schedule') {
         var when = scheduledAt ? scheduledAt.value.trim() : '';

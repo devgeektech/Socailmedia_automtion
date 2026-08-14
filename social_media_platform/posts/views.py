@@ -735,6 +735,53 @@ def media_upload_view(request):
 
 @subscription_required
 @require_POST
+def media_quick_upload_view(request):
+    """
+    Save a picked file into the library while the user keeps editing the form,
+    so submitting a post does not have to re-send the whole file.
+    """
+    from .media_utils import kind_from_name, save_upload_to_library
+    from .models import MediaAsset
+
+    files = request.FILES.getlist('files') or (
+        [request.FILES['file']] if request.FILES.get('file') else []
+    )
+    if not files:
+        return JsonResponse({'ok': False, 'error': 'No file received.'}, status=400)
+
+    items = []
+    skipped = 0
+    for f in files[:10]:
+        kind = kind_from_name(f.name)
+        if kind not in {MediaAsset.KIND_IMAGE, MediaAsset.KIND_VIDEO}:
+            skipped += 1
+            continue
+        try:
+            asset = save_upload_to_library(request.user, f)
+        except Exception:
+            logger.exception('Quick upload failed for %s', f.name)
+            return JsonResponse(
+                {'ok': False, 'error': 'Could not save that file. Please try again.'},
+                status=500,
+            )
+        items.append({
+            'id': asset.pk,
+            'url': asset.file.url,
+            'name': asset.original_name or 'Saved media',
+            'type': 'video' if asset.kind == MediaAsset.KIND_VIDEO else 'image',
+        })
+
+    if not items:
+        return JsonResponse(
+            {'ok': False, 'error': 'Use JPG, PNG, WEBP, GIF, MP4, or MOV files.'},
+            status=400,
+        )
+
+    return JsonResponse({'ok': True, 'items': items, 'skipped': skipped})
+
+
+@subscription_required
+@require_POST
 def media_delete_view(request, pk):
     from .models import MediaAsset
 

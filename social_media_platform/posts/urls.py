@@ -10,6 +10,7 @@ urlpatterns = [
     path('posts/media/', views.media_library_view, name='media_library'),
     path('posts/media/picker/', views.media_picker_api_view, name='media_picker'),
     path('posts/media/upload/', views.media_upload_view, name='media_upload'),
+    path('posts/media/quick-upload/', views.media_quick_upload_view, name='media_quick_upload'),
     path('posts/media/<int:pk>/delete/', views.media_delete_view, name='media_delete'),
     path('posts/<int:pk>/edit/', views.post_edit_view, name='edit'),
     path('posts/<int:pk>/duplicate/', views.post_duplicate_view, name='duplicate'),
