@@ -1758,12 +1758,9 @@
     if (initial === 'device' || initial === 'ai' || initial === 'library') {
       activeSource = initial;
       showPanel(initial, false);
-    } else if (document.querySelector('#photo-panel-ai .form-error')) {
-      var aiRadio = document.querySelector('input[name="photo_source_ui"][value="ai"]');
-      if (aiRadio) aiRadio.checked = true;
-      activeSource = 'ai';
-      showPanel('ai', false);
     }
+    // Do not auto-open AI when the only issue is missing media — keep the
+    // chooser closed so the user picks a source themselves.
   })();
   if (pickerModal) {
     pickerModal.querySelectorAll('.js-media-picker-close').forEach(function (el) {
