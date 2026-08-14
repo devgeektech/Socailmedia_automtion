@@ -86,7 +86,7 @@
               </svg>
             </span>
             <span class="photo-radio-copy">
-              <strong>Saved photos</strong>
+              <strong>Saved posts</strong>
               <small>{% if has_library_photos or library_assets %}Pick from earlier uploads{% else %}None saved yet{% endif %}</small>
             </span>
             <span class="photo-radio-mark" aria-hidden="true"></span>
@@ -116,8 +116,8 @@
         </div>
 
         <div class="photo-panel" id="photo-panel-library"{% if photo_source != 'library' %} hidden{% endif %}>
-          <p class="platform-note" style="margin-bottom:0.75rem;">Pick one or more photos you’ve saved before.</p>
-          <button type="button" class="btn-secondary photo-source-btn" id="btn-choose-saved">Browse saved photos</button>
+          <p class="platform-note" style="margin-bottom:0.75rem;">Pick one or more posts you’ve saved before.</p>
+          <button type="button" class="btn-secondary photo-source-btn" id="btn-choose-saved">Browse saved posts</button>
         </div>
 
         <input type="file" name="carousel_files" id="id_carousel_files" class="photo-file-input" accept="image/*,video/mp4,video/quicktime,.mp4,.mov,.m4v" multiple>
@@ -297,13 +297,13 @@
   <div class="media-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="media-picker-title">
     <div class="media-picker-header">
       <div>
-        <h2 class="media-picker-title" id="media-picker-title">Choose saved photos</h2>
+        <h2 class="media-picker-title" id="media-picker-title">Choose saved posts</h2>
         <p class="platform-note" id="media-picker-count">Select one or more photos.</p>
       </div>
       <button type="button" class="btn-secondary btn-sm js-media-picker-close" aria-label="Close">Close</button>
     </div>
     <div class="media-picker-grid" id="media-picker-grid" aria-live="polite"></div>
-    <p class="platform-note media-picker-empty" id="media-picker-empty" hidden>No saved photos yet.</p>
+    <p class="platform-note media-picker-empty" id="media-picker-empty" hidden>No saved posts yet.</p>
     <div class="media-picker-footer">
       <button type="button" class="btn-secondary" id="media-picker-load-more" hidden>Load more</button>
       <button type="button" class="btn-primary" id="media-picker-done" style="width:auto;">Done</button>
@@ -1614,7 +1614,7 @@
         if (pickerEmpty) {
           pickerEmpty.hidden = !!(data.items && data.items.length) || !!(append && pickerGrid && pickerGrid.children.length);
           if (!(data.items && data.items.length) && !append) {
-            pickerEmpty.textContent = 'No saved photos yet. Upload from your device first.';
+            pickerEmpty.textContent = 'No saved posts yet. Upload from your device first.';
           }
         }
         if (pickerLoadMore) {
