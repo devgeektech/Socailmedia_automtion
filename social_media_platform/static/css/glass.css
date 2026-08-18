@@ -946,7 +946,7 @@ body.home-page .grid-overlay {
   padding: 0.9rem;
   border-radius: 22px;
   border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.12);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   box-shadow: 0 18px 40px rgba(12, 31, 46, 0.18);
@@ -954,45 +954,53 @@ body.home-page .grid-overlay {
 
 .stream-post-2 {
   transform: translateX(18px);
-  opacity: 0.9;
 }
 
 .stream-post-3 {
   transform: translateX(-8px);
-  opacity: 0.82;
 }
 
 .stream-thumb {
   width: 72px;
   height: 72px;
   border-radius: 16px;
-  background:
-    linear-gradient(145deg, rgba(94, 234, 212, 0.55), rgba(232, 93, 76, 0.4));
+  object-fit: cover;
+  display: block;
+  background: rgba(255, 255, 255, 0.12);
 }
 
-.stream-post-2 .stream-thumb {
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.35), rgba(13, 148, 136, 0.45));
-}
-
-.stream-post-3 .stream-thumb {
-  background: linear-gradient(145deg, rgba(232, 93, 76, 0.45), rgba(255, 255, 255, 0.2));
-}
-
-.stream-lines {
+.stream-copy {
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.28rem;
 }
 
-.stream-lines span {
-  display: block;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.28);
+.stream-caption {
+  margin: 0;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.stream-lines span:first-child { width: 78%; }
-.stream-lines span:last-child { width: 52%; }
+.stream-meta {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.72rem;
+  letter-spacing: 0.01em;
+}
+
+.stream-meta b {
+  font-weight: 700;
+  color: #5eead4;
+}
+
+.stream-post-2 .stream-meta b { color: #fff; }
+.stream-post-3 .stream-meta b { color: #fdba74; }
 
 .stream-platforms {
   display: flex;
